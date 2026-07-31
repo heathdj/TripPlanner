@@ -61,6 +61,12 @@ This project did not yet have `AGENTS.md` or `Journal.md`, so we created both. T
 
 The practical benefit is less repetition. The next engineer does not have to rediscover that the module name is `Trip_Planner`, the project path contains spaces, or the app is still at starter-template stage.
 
+### 2026-07-31: The Issue-To-PR Conveyor Belt
+
+We established the working rhythm for future feature work: start by getting the latest from GitHub, branch from `main`, code the issue, test it, then stage, commit, push, and open a pull request.
+
+This is the engineering equivalent of mise en place in a kitchen. Ingredients first, clean station, one dish at a time. The payoff is that every issue gets a traceable branch, every branch gets tested before review, and GitHub stays the source of truth instead of becoming a scrapbook of half-finished ideas.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

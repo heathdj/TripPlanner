@@ -37,6 +37,15 @@ Trip Planner is an iOS SwiftUI app for planning, organizing, and eventually shar
 - The connected GitHub app reports admin, maintain, pull, push, and triage permissions for this repository.
 - Current issue backlog is available through GitHub. As of 2026-07-31, issues `#1` through `#35` exist, with `#9` closed and the rest open.
 
+## Issue Workflow
+
+- Before starting issue work, fetch the latest GitHub state and update the local `main` branch.
+- Create a dedicated branch from `main` for the issue.
+- Keep implementation scoped to the issue being worked.
+- Run the relevant tests and build checks before publishing.
+- When the issue is coded and tests pass, stage the intended changes, commit them, push the branch to GitHub, and create a pull request.
+- Comment on GitHub issues when it helps clarify scope, report progress, or connect the resulting pull request.
+
 ## Quirks And Gotchas
 
 - The project path contains spaces: `Trip Planner/Trip Planner`. Quote paths in shell commands.
