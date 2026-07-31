@@ -67,6 +67,14 @@ We established the working rhythm for future feature work: start by getting the 
 
 This is the engineering equivalent of mise en place in a kitchen. Ingredients first, clean station, one dish at a time. The payoff is that every issue gets a traceable branch, every branch gets tested before review, and GitHub stays the source of truth instead of becoming a scrapbook of half-finished ideas.
 
+### 2026-07-31: Issue #1 Builds the Lobby
+
+Issue `#1` turned the starter "Hello, world!" room into the app's first real lobby: a SwiftUI tab foundation with a Trips dashboard, Settings screen, sample trip summaries, and reusable Liquid Glass panels.
+
+The architectural lesson is simple: even a foundation needs real shapes. We added `Models`, `Stores`, `Services`, `Views`, `Components`, and `Resources` before the app became large enough to demand them, but not so much structure that the project feels like a filing cabinet with no papers in it.
+
+Validation had one environment-shaped pothole on the first pass: the test runner could not see a concrete simulator until Xcode's default device was set to iPhone 17 Pro. Once the simulator was available, the full test plan passed. That is a good reminder that test infrastructure is part of the app's plumbing, not just background noise.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

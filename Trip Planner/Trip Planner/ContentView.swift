@@ -1,24 +1,13 @@
-//
-//  ContentView.swift
-//  Trip Planner
-//
-//  Created by David Heath on 7/31/26.
-//
-
 import SwiftUI
 
 struct ContentView: View {
-    var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
-        }
-        .padding()
-    }
-}
+    private let store = TripStore()
+    private let appInfoProvider = BundleAppInfoProvider()
 
-#Preview {
-    ContentView()
+    var body: some View {
+        TripPlannerRootView(
+            store: store,
+            appInfo: appInfoProvider.appInfo
+        )
+    }
 }
