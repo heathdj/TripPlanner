@@ -1,13 +1,12 @@
 import SwiftUI
 
 struct TripPlannerRootView: View {
-    let store: TripStore
     let appInfo: AppInfo
 
     var body: some View {
         TabView {
             Tab("Trips", systemImage: "map") {
-                DashboardView(store: store)
+                DashboardView()
             }
 
             Tab("Settings", systemImage: "gearshape") {

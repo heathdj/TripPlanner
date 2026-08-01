@@ -1,11 +1,26 @@
+import SwiftData
 import SwiftUI
 
 struct DashboardView: View {
-    let store: TripStore
+    @Query private var trips: [Trip]
 
     private let columns = [
         GridItem(.adaptive(minimum: 280), spacing: 16)
     ]
+
+    private var openTrips: [Trip] {
+        TripStore.sortedOpenTrips(trips)
+    }
+
+    private var closedTrips: [Trip] {
+        TripStore.sortedClosedTrips(trips)
+    }
+
+    private var plannedItemTotal: Int {
+        trips.reduce(0) { total, trip in
+            total + trip.plannedItemCount
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -15,13 +30,25 @@ struct DashboardView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
-                        HeroPanel(store: store)
+                        HeroPanel(
+                            nextTrip: openTrips.first,
+                            openTripCount: openTrips.count,
+                            plannedItemTotal: plannedItemTotal
+                        )
 
-                        LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-                            ForEach(store.trips) { trip in
-                                TripSummaryCard(trip: trip)
-                            }
-                        }
+                        TripSection(
+                            title: "Open Trips",
+                            emptyTitle: "No open trips",
+                            trips: openTrips,
+                            columns: columns
+                        )
+
+                        TripSection(
+                            title: "Closed Trips",
+                            emptyTitle: "No closed trips",
+                            trips: closedTrips,
+                            columns: columns
+                        )
                     }
                     .padding()
                     .frame(maxWidth: 980)
@@ -42,22 +69,24 @@ struct DashboardView: View {
 }
 
 private struct HeroPanel: View {
-    let store: TripStore
+    let nextTrip: Trip?
+    let openTripCount: Int
+    let plannedItemTotal: Int
 
     var body: some View {
         GlassEffectContainer(spacing: 16) {
             GlassPanel(cornerRadius: 28) {
                 VStack(alignment: .leading, spacing: 20) {
-                    Label("First Release Foundation", systemImage: "sparkles")
+                    Label("Flexible Travel Windows", systemImage: "calendar.badge.clock")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
 
-                    Text("Plan the next good day away.")
+                    Text("Plan the trip length separately from when it can happen.")
                         .font(.largeTitle.weight(.bold))
                         .fontDesign(.rounded)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    if let nextTrip = store.nextTrip {
+                    if let nextTrip {
                         Text(nextTrip.highlight)
                             .font(.body)
                             .foregroundStyle(.secondary)
@@ -66,16 +95,45 @@ private struct HeroPanel: View {
 
                     HStack(spacing: 12) {
                         StatPill(
-                            title: "Active Trips",
-                            value: "\(store.activeTrips.count)",
+                            title: "Open Trips",
+                            value: "\(openTripCount)",
                             systemImage: "suitcase.rolling.fill"
                         )
 
                         StatPill(
                             title: "Planned Items",
-                            value: "\(store.plannedItemTotal)",
+                            value: "\(plannedItemTotal)",
                             systemImage: "list.bullet.clipboard.fill"
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct TripSection: View {
+    let title: String
+    let emptyTitle: String
+    let trips: [Trip]
+    let columns: [GridItem]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.title3.weight(.bold))
+                .fontDesign(.rounded)
+
+            if trips.isEmpty {
+                GlassPanel {
+                    Label(emptyTitle, systemImage: "tray")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
+                    ForEach(trips) { trip in
+                        TripSummaryCard(trip: trip.summary())
                     }
                 }
             }
@@ -114,17 +172,27 @@ private struct TripSummaryCard: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                HStack {
+                VStack(alignment: .leading, spacing: 8) {
                     Label(trip.dateRange, systemImage: "calendar")
-                    Spacer(minLength: 12)
+                    Label(trip.durationSummary, systemImage: "clock")
+                    Label(trip.startDateSummary, systemImage: "arrow.triangle.branch")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                HStack {
                     Text(trip.status.rawValue)
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .glassEffect(.regular.tint(.orange.opacity(0.18)), in: .capsule)
+
+                    Spacer(minLength: 12)
+
+                    Text("\(trip.plannedItemCount) planned")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
             }
         }
         .accessibilityElement(children: .combine)

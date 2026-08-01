@@ -1,10 +1,4 @@
-//
-//  Trip_PlannerApp.swift
-//  Trip Planner
-//
-//  Created by David Heath on 7/31/26.
-//
-
+import SwiftData
 import SwiftUI
 
 @main
@@ -13,5 +7,10 @@ struct Trip_PlannerApp: App {
         WindowGroup {
             ContentView()
         }
+        .modelContainer(for: [
+            Trip.self,
+            ReviewedTripPlan.self,
+            TravelSettings.self
+        ])
     }
 }

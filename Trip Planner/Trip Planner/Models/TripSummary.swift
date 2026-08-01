@@ -5,6 +5,8 @@ struct TripSummary: Identifiable, Hashable, Sendable {
     var title: String
     var location: String
     var dateRange: String
+    var durationSummary: String
+    var startDateSummary: String
     var status: TripStatus
     var highlight: String
     var plannedItemCount: Int
@@ -14,6 +16,8 @@ struct TripSummary: Identifiable, Hashable, Sendable {
         title: String,
         location: String,
         dateRange: String,
+        durationSummary: String,
+        startDateSummary: String,
         status: TripStatus,
         highlight: String,
         plannedItemCount: Int
@@ -22,6 +26,8 @@ struct TripSummary: Identifiable, Hashable, Sendable {
         self.title = title
         self.location = location
         self.dateRange = dateRange
+        self.durationSummary = durationSummary
+        self.startDateSummary = startDateSummary
         self.status = status
         self.highlight = highlight
         self.plannedItemCount = plannedItemCount
