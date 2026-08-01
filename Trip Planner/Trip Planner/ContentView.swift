@@ -1,13 +1,15 @@
+import SwiftData
 import SwiftUI
 
 struct ContentView: View {
-    private let store = TripStore()
+    @Environment(\.modelContext) private var modelContext
+
     private let appInfoProvider = BundleAppInfoProvider()
 
     var body: some View {
-        TripPlannerRootView(
-            store: store,
-            appInfo: appInfoProvider.appInfo
-        )
+        TripPlannerRootView(appInfo: appInfoProvider.appInfo)
+            .task {
+                try? TripSeedService.seedIfNeeded(in: modelContext)
+            }
     }
 }

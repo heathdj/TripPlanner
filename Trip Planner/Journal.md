@@ -75,6 +75,14 @@ The architectural lesson is simple: even a foundation needs real shapes. We adde
 
 Validation had one environment-shaped pothole on the first pass: the test runner could not see a concrete simulator until Xcode's default device was set to iPhone 17 Pro. Once the simulator was available, the full test plan passed. That is a good reminder that test infrastructure is part of the app's plumbing, not just background noise.
 
+### 2026-07-31: Issue #2 Gives Trips a Calendar Spine
+
+Issue `#2` taught the app the difference between "how long am I away?" and "when could this happen?" A trip can now have a 15-day possible window while still being a 4-day trip, which is exactly how real travel planning works when flights, PTO, school calendars, and weather all argue at once.
+
+SwiftData became the pantry for durable trip facts: trips, reviewed plans, and travel defaults now persist locally. The dashboard speaks in three separate ideas: travel window, trip duration, and possible start dates. Settings owns the default trip duration and default window length, so future trip creation has sensible starting points instead of magic numbers hiding in a view.
+
+The main engineering lesson: date math should be boring on purpose. Normalize to start-of-day, clamp invalid values, count inclusively, and test the edge cases. Calendars are where off-by-one bugs like to rent apartments.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

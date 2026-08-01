@@ -1,22 +1,16 @@
 import Foundation
 
-enum TripStatus: String, CaseIterable, Identifiable, Sendable {
-    case nearby = "Nearby"
-    case planning = "Planning"
-    case booked = "Booked"
-    case complete = "Complete"
+enum TripStatus: String, Codable, CaseIterable, Identifiable, Sendable {
+    case open = "Open"
+    case closed = "Closed"
 
     var id: String { rawValue }
 
     var systemImage: String {
         switch self {
-        case .nearby:
-            "location.fill"
-        case .planning:
+        case .open:
             "map"
-        case .booked:
-            "checkmark.seal.fill"
-        case .complete:
+        case .closed:
             "archivebox.fill"
         }
     }
