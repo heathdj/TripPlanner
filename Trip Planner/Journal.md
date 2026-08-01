@@ -83,6 +83,12 @@ SwiftData became the pantry for durable trip facts: trips, reviewed plans, and t
 
 The main engineering lesson: date math should be boring on purpose. Normalize to start-of-day, clamp invalid values, count inclusively, and test the edge cases. Calendars are where off-by-one bugs like to rent apartments.
 
+### 2026-07-31: Issue #36 Lets the App Change Clothes
+
+Issue `#36` gave Trip Planner a small wardrobe of app icons. The default Map Pins icon now sits beside Compass Spark, Layered Itinerary, and Route Case, and Settings can ask iOS to switch between them using the supported alternate-icon API.
+
+The important pattern is that Settings does not pretend icon changes are guaranteed. Some devices do not support alternate icons, and iOS can reject a change, so the UI reports failures without damaging the current selection. Personalization should feel optional and reversible, not like a trapdoor.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

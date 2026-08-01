@@ -146,6 +146,58 @@ struct TripPlannerFoundationTests {
     }
 
     @MainActor
+    @Test("App icon options expose primary and alternate icons", .bug("https://github.com/heathdj/TripPlanner/issues/36"))
+    func appIconOptionsExposeConfiguredChoices() {
+        let options = AppIconOption.all
+
+        #expect(options.count == 4)
+        #expect(options[0].iconName == nil)
+        #expect(options.dropFirst().map(\.iconName) == [
+            "AppIcon-CompassSpark",
+            "AppIcon-LayeredItinerary",
+            "AppIcon-RouteCase"
+        ])
+        #expect(AppIconOption.option(for: "AppIcon-RouteCase").displayName == "Route Case")
+        #expect(AppIconOption.option(for: "Missing").displayName == "Map Pins")
+    }
+
+    @MainActor
+    @Test("Info plist declares alternate app icons", .bug("https://github.com/heathdj/TripPlanner/issues/36"))
+    func infoPlistDeclaresAlternateIcons() throws {
+        let icons = try #require(Bundle.main.object(forInfoDictionaryKey: "CFBundleIcons") as? [String: Any])
+        let alternateIcons = try #require(icons["CFBundleAlternateIcons"] as? [String: Any])
+
+        #expect(Set(alternateIcons.keys) == [
+            "AppIcon-CompassSpark",
+            "AppIcon-LayeredItinerary",
+            "AppIcon-RouteCase"
+        ])
+    }
+
+    @MainActor
+    @Test("App icon manager records supported selections", .bug("https://github.com/heathdj/TripPlanner/issues/36"))
+    func appIconManagerRecordsSupportedSelection() async throws {
+        let manager = FakeAppIconManager(supportsAlternateIcons: true)
+
+        try await manager.setIconName("AppIcon-CompassSpark")
+
+        #expect(manager.currentIconName == "AppIcon-CompassSpark")
+        #expect(manager.requestedIconNames == ["AppIcon-CompassSpark"])
+    }
+
+    @MainActor
+    @Test("App icon manager rejects unsupported devices", .bug("https://github.com/heathdj/TripPlanner/issues/36"))
+    func appIconManagerRejectsUnsupportedDevices() async throws {
+        let manager = FakeAppIconManager(supportsAlternateIcons: false)
+
+        await #expect(throws: AppIconError.alternateIconsUnsupported) {
+            try await manager.setIconName("AppIcon-RouteCase")
+        }
+        #expect(manager.currentIconName == nil)
+        #expect(manager.requestedIconNames.isEmpty)
+    }
+
+    @MainActor
     private func trip(title: String, startDay: Int, endDay: Int, status: TripStatus) -> Trip {
         Trip(
             title: title,
@@ -194,5 +246,25 @@ struct TripPlannerFoundationTests {
         for url in relatedURLs where fileManager.fileExists(atPath: url.path()) {
             try fileManager.removeItem(at: url)
         }
+    }
+}
+
+@MainActor
+private final class FakeAppIconManager: AppIconManaging {
+    let supportsAlternateIcons: Bool
+    var currentIconName: String?
+    var requestedIconNames: [String?] = []
+
+    init(supportsAlternateIcons: Bool) {
+        self.supportsAlternateIcons = supportsAlternateIcons
+    }
+
+    func setIconName(_ iconName: String?) async throws {
+        guard supportsAlternateIcons else {
+            throw AppIconError.alternateIconsUnsupported
+        }
+
+        requestedIconNames.append(iconName)
+        currentIconName = iconName
     }
 }
