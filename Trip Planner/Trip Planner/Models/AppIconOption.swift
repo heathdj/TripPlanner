@@ -14,28 +14,28 @@ struct AppIconOption: Identifiable, Equatable, Sendable {
             id: "mapPins",
             displayName: "Map Pins",
             iconName: nil,
-            previewImageName: "MapPins",
+            previewImageName: "AppIconPreview-MapPins",
             accessibilityDescription: "Default blue map pins icon"
         ),
         AppIconOption(
             id: "compassSpark",
             displayName: "Compass Spark",
             iconName: "AppIcon-CompassSpark",
-            previewImageName: "CompassSpark",
+            previewImageName: "AppIconPreview-CompassSpark",
             accessibilityDescription: "Blue compass spark alternate icon"
         ),
         AppIconOption(
             id: "layeredItinerary",
             displayName: "Layered Itinerary",
             iconName: "AppIcon-LayeredItinerary",
-            previewImageName: "LayeredItinerary",
+            previewImageName: "AppIconPreview-LayeredItinerary",
             accessibilityDescription: "Layered itinerary alternate icon"
         ),
         AppIconOption(
             id: "routeCase",
             displayName: "Route Case",
             iconName: "AppIcon-RouteCase",
-            previewImageName: "RouteCase",
+            previewImageName: "AppIconPreview-RouteCase",
             accessibilityDescription: "Route case alternate icon"
         )
     ]

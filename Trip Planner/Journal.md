@@ -89,6 +89,8 @@ Issue `#36` gave Trip Planner a small wardrobe of app icons. The default Map Pin
 
 The important pattern is that Settings does not pretend icon changes are guaranteed. Some devices do not support alternate icons, and iOS can reject a change, so the UI reports failures without damaging the current selection. Personalization should feel optional and reversible, not like a trapdoor.
 
+Bug follow-up: the first Settings preview tried to load the raw icon layer filenames directly. Those files live inside Icon Composer bundles, so they are not ordinary named images at runtime. The fix was to mirror the same artwork into dedicated preview image sets in `Assets.xcassets`, keeping the real `.icon` bundles for iOS and giving SwiftUI a dependable image catalog lookup.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.
