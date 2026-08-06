@@ -19,7 +19,7 @@ struct TripPlannerFoundationTests {
         #expect(trip.windowLengthDays == 15)
         #expect(trip.durationDays == 4)
         #expect(trip.validStartDateCount == 12)
-        #expect(trip.durationDisplayString == "4 days away")
+        #expect(trip.durationDisplayString == "4 days")
         #expect(trip.startDateDisplayString == "12 possible start dates")
     }
 

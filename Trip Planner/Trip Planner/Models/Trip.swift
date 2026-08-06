@@ -70,7 +70,7 @@ final class Trip {
     }
 
     var durationDisplayString: String {
-        durationDays == 1 ? "1 day away" : "\(durationDays) days away"
+        durationDays == 1 ? "1 day" : "\(durationDays) days"
     }
 
     var startDateDisplayString: String {
