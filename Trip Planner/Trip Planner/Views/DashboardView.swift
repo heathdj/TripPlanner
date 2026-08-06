@@ -1,19 +1,44 @@
+import CoreLocation
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct DashboardView: View {
     @Query private var trips: [Trip]
+    @Query private var settings: [TravelSettings]
+
+    @State private var locationService = LocationService()
 
     private let columns = [
         GridItem(.adaptive(minimum: 280), spacing: 16)
     ]
 
+    private var distanceUnit: DistanceUnit {
+        settings.first?.distanceUnit ?? .kilometers
+    }
+
+    private var nearYouDistanceKilometers: Double {
+        settings.first?.nearYouDistanceKilometers ?? TravelSettings.defaultNearYouDistanceKilometers
+    }
+
+    private var tripGroups: TripGroups {
+        TripStore.groupedTrips(
+            trips,
+            userLocation: locationService.currentLocation,
+            nearYouDistanceKilometers: nearYouDistanceKilometers
+        )
+    }
+
     private var openTrips: [Trip] {
-        TripStore.sortedOpenTrips(trips)
+        tripGroups.openTrips
     }
 
     private var closedTrips: [Trip] {
-        TripStore.sortedClosedTrips(trips)
+        tripGroups.closedTrips
+    }
+
+    private var openTripCount: Int {
+        trips.filter { $0.status == .open }.count
     }
 
     private var plannedItemTotal: Int {
@@ -31,9 +56,19 @@ struct DashboardView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         HeroPanel(
-                            nextTrip: openTrips.first,
-                            openTripCount: openTrips.count,
+                            nextTrip: tripGroups.nearbyTrips.first?.trip ?? openTrips.first,
+                            openTripCount: openTripCount,
                             plannedItemTotal: plannedItemTotal
+                        )
+
+                        NearYouSection(
+                            nearbyTrips: tripGroups.nearbyTrips,
+                            distanceUnit: distanceUnit,
+                            authorizationStatus: locationService.authorizationStatus,
+                            isRequestingLocation: locationService.isRequestingLocation,
+                            errorMessage: locationService.errorMessage,
+                            requestLocation: locationService.requestLocationAccess,
+                            openSystemSettings: openSystemSettings
                         )
 
                         TripSection(
@@ -65,6 +100,11 @@ struct DashboardView: View {
                 }
             }
         }
+    }
+
+    private func openSystemSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 }
 
@@ -112,6 +152,117 @@ private struct HeroPanel: View {
     }
 }
 
+private struct NearYouSection: View {
+    let nearbyTrips: [NearbyTrip]
+    let distanceUnit: DistanceUnit
+    let authorizationStatus: CLAuthorizationStatus
+    let isRequestingLocation: Bool
+    let errorMessage: String?
+    let requestLocation: () -> Void
+    let openSystemSettings: () -> Void
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 280), spacing: 16)
+    ]
+
+    private var isDeniedOrRestricted: Bool {
+        authorizationStatus == .denied || authorizationStatus == .restricted
+    }
+
+    private var canUseLocation: Bool {
+        authorizationStatus == .authorizedAlways || authorizationStatus == .authorizedWhenInUse
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Near You")
+                .font(.title3.weight(.bold))
+                .fontDesign(.rounded)
+
+            if nearbyTrips.isEmpty {
+                locationStatusPanel
+            } else {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
+                    ForEach(nearbyTrips) { nearbyTrip in
+                        TripSummaryCard(
+                            trip: nearbyTrip.trip.summary(),
+                            distanceSummary: distanceUnit.formattedDistance(meters: nearbyTrip.distanceMeters)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private var locationStatusPanel: some View {
+        GlassPanel {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(statusTitle, systemImage: statusIcon)
+                    .font(.headline)
+                    .fontDesign(.rounded)
+
+                Text(statusMessage)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if isDeniedOrRestricted {
+                    Button("Open Settings", systemImage: "gearshape") {
+                        openSystemSettings()
+                    }
+                    .buttonStyle(.glassProminent)
+                } else {
+                    Button(requestButtonTitle, systemImage: "location.fill") {
+                        requestLocation()
+                    }
+                    .buttonStyle(.glassProminent)
+                    .disabled(isRequestingLocation)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var statusTitle: String {
+        if isDeniedOrRestricted {
+            return "Location access is off"
+        }
+
+        if canUseLocation {
+            return "No nearby open trips"
+        }
+
+        return "Find trips near you"
+    }
+
+    private var statusMessage: String {
+        if isDeniedOrRestricted {
+            return "Trip Planner can still show Open and Closed trips. Enable location access in Settings to promote nearby open trips here."
+        }
+
+        if canUseLocation {
+            return "Open trips outside your Near You distance stay in the Open Trips section."
+        }
+
+        return "Use your current location to promote nearby open trips into this section."
+    }
+
+    private var statusIcon: String {
+        isDeniedOrRestricted ? "location.slash.fill" : "location.fill"
+    }
+
+    private var requestButtonTitle: String {
+        isRequestingLocation ? "Finding Location" : "Use My Location"
+    }
+}
+
 private struct TripSection: View {
     let title: String
     let emptyTitle: String
@@ -143,6 +294,7 @@ private struct TripSection: View {
 
 private struct TripSummaryCard: View {
     let trip: TripSummary
+    var distanceSummary: String? = nil
 
     var body: some View {
         GlassPanel {
@@ -173,6 +325,9 @@ private struct TripSummaryCard: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 VStack(alignment: .leading, spacing: 8) {
+                    if let distanceSummary {
+                        Label(distanceSummary, systemImage: "location.fill")
+                    }
                     Label(trip.dateRange, systemImage: "calendar")
                     Label(trip.durationSummary, systemImage: "clock")
                     Label(trip.startDateSummary, systemImage: "arrow.triangle.branch")

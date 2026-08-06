@@ -12,6 +12,8 @@ final class Trip {
     var status: TripStatus
     var highlight: String
     var plannedItemCount: Int
+    var latitude: Double?
+    var longitude: Double?
     var createdAt: Date
     var updatedAt: Date
 
@@ -25,6 +27,8 @@ final class Trip {
         status: TripStatus = .open,
         highlight: String = "",
         plannedItemCount: Int = 0,
+        latitude: Double? = nil,
+        longitude: Double? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now,
         calendar: Calendar = .current
@@ -38,6 +42,8 @@ final class Trip {
         self.status = status
         self.highlight = highlight
         self.plannedItemCount = max(0, plannedItemCount)
+        self.latitude = latitude
+        self.longitude = longitude
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -72,6 +78,12 @@ final class Trip {
 
     func updateDuration(days: Int) {
         durationDays = max(1, days)
+        updatedAt = .now
+    }
+
+    func updateLocation(latitude: Double?, longitude: Double?) {
+        self.latitude = latitude
+        self.longitude = longitude
         updatedAt = .now
     }
 

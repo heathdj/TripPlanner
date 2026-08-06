@@ -1,4 +1,5 @@
 import Foundation
+import CoreLocation
 import SwiftData
 import Testing
 @testable import Trip_Planner
@@ -69,12 +70,82 @@ struct TripPlannerFoundationTests {
 
         #expect(settings.defaultDurationDays == 14)
         #expect(settings.defaultWindowLengthDays == 45)
+        #expect(settings.distanceUnit == .kilometers)
+        #expect(settings.nearYouDistanceKilometers == 100)
 
         settings.updateDefaultDuration(days: 0)
         settings.updateDefaultWindowLength(days: -4)
+        settings.updateDistanceUnit(.miles)
+        settings.updateNearYouDistance(value: 50, unit: .miles)
 
         #expect(settings.defaultDurationDays == 1)
         #expect(settings.defaultWindowLengthDays == 1)
+        #expect(settings.distanceUnit == .miles)
+        #expect(settings.nearYouDistanceKilometers == 50 * 1.609344)
+    }
+
+    @MainActor
+    @Test("Nearby grouping promotes only open trips inside the radius", .bug("https://github.com/heathdj/TripPlanner/issues/3"))
+    func nearbyGroupingPromotesOpenTripsInsideRadius() {
+        let userLocation = CLLocation(latitude: 41.8781, longitude: -87.6298)
+        let nearbyOpen = trip(
+            title: "Nearby",
+            startDay: 1,
+            endDay: 2,
+            status: .open,
+            latitude: 41.8818,
+            longitude: -87.6231
+        )
+        let farOpen = trip(
+            title: "Far",
+            startDay: 3,
+            endDay: 4,
+            status: .open,
+            latitude: 40.7128,
+            longitude: -74.0060
+        )
+        let nearbyClosed = trip(
+            title: "Closed nearby",
+            startDay: 5,
+            endDay: 6,
+            status: .closed,
+            latitude: 41.8818,
+            longitude: -87.6231
+        )
+
+        let groups = TripStore.groupedTrips(
+            [farOpen, nearbyClosed, nearbyOpen],
+            userLocation: userLocation,
+            nearYouDistanceKilometers: 100
+        )
+
+        #expect(groups.nearbyTrips.map(\.trip.title) == ["Nearby"])
+        #expect(groups.openTrips.map(\.title) == ["Far"])
+        #expect(groups.closedTrips.map(\.title) == ["Closed nearby"])
+    }
+
+    @MainActor
+    @Test("Grouping without location keeps open and closed trips visible", .bug("https://github.com/heathdj/TripPlanner/issues/3"))
+    func groupingWithoutLocationKeepsOpenAndClosedTripsVisible() {
+        let open = trip(
+            title: "Open",
+            startDay: 1,
+            endDay: 2,
+            status: .open,
+            latitude: 41.8818,
+            longitude: -87.6231
+        )
+        let closed = trip(title: "Closed", startDay: 3, endDay: 4, status: .closed)
+
+        let groups = TripStore.groupedTrips(
+            [closed, open],
+            userLocation: nil,
+            nearYouDistanceKilometers: 100
+        )
+
+        #expect(groups.nearbyTrips.isEmpty)
+        #expect(groups.openTrips.map(\.title) == ["Open"])
+        #expect(groups.closedTrips.map(\.title) == ["Closed"])
     }
 
     @MainActor
@@ -124,6 +195,8 @@ struct TripPlannerFoundationTests {
         #expect(persistedTrip.validStartDateCount == 12)
         #expect(persistedSetting.defaultDurationDays == 14)
         #expect(persistedSetting.defaultWindowLengthDays == 45)
+        #expect(persistedSetting.distanceUnit == .kilometers)
+        #expect(persistedSetting.nearYouDistanceKilometers == 100)
         #expect(persistedPlan.tripID == persistedTrip.id)
         #expect(persistedPlan.title == "Reviewed Santa Fe plan")
     }
@@ -198,14 +271,23 @@ struct TripPlannerFoundationTests {
     }
 
     @MainActor
-    private func trip(title: String, startDay: Int, endDay: Int, status: TripStatus) -> Trip {
+    private func trip(
+        title: String,
+        startDay: Int,
+        endDay: Int,
+        status: TripStatus,
+        latitude: Double? = nil,
+        longitude: Double? = nil
+    ) -> Trip {
         Trip(
             title: title,
             location: "Test",
             windowStartDate: date(year: 2026, month: 5, day: startDay),
             windowEndDate: date(year: 2026, month: 5, day: endDay),
             durationDays: 2,
-            status: status
+            status: status,
+            latitude: latitude,
+            longitude: longitude
         )
     }
 

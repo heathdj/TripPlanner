@@ -247,6 +247,25 @@ private struct DefaultsSection: View {
                             value: "\(settings.defaultWindowLengthDays) days"
                         )
                     }
+
+                    Picker("Distance units", selection: distanceUnitBinding(for: settings)) {
+                        ForEach(DistanceUnit.allCases) { unit in
+                            Text(unit.displayName)
+                                .tag(unit)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Stepper(
+                        value: nearYouDistanceBinding(for: settings),
+                        in: nearYouDistanceRange(for: settings.distanceUnit),
+                        step: 5
+                    ) {
+                        LabeledContent(
+                            "Near you distance",
+                            value: settings.nearYouDistanceDisplayString
+                        )
+                    }
                 } else {
                     Text("Defaults are created when the app starts.")
                         .foregroundStyle(.secondary)
@@ -270,6 +289,33 @@ private struct DefaultsSection: View {
         } set: { newValue in
             settings.updateDefaultWindowLength(days: newValue)
             save()
+        }
+    }
+
+    private func distanceUnitBinding(for settings: TravelSettings) -> Binding<DistanceUnit> {
+        Binding {
+            settings.distanceUnit
+        } set: { newValue in
+            settings.updateDistanceUnit(newValue)
+            save()
+        }
+    }
+
+    private func nearYouDistanceBinding(for settings: TravelSettings) -> Binding<Double> {
+        Binding {
+            settings.nearYouDistanceValue
+        } set: { newValue in
+            settings.updateNearYouDistance(value: newValue, unit: settings.distanceUnit)
+            save()
+        }
+    }
+
+    private func nearYouDistanceRange(for unit: DistanceUnit) -> ClosedRange<Double> {
+        switch unit {
+        case .kilometers:
+            return 5...500
+        case .miles:
+            return 5...300
         }
     }
 }
