@@ -12,6 +12,9 @@ final class Trip {
     var status: TripStatus
     var highlight: String
     var plannedItemCount: Int
+    var completedItemCount: Int
+    var travelerCount: Int
+    var itineraryItems: [String]
     var latitude: Double?
     var longitude: Double?
     var createdAt: Date
@@ -27,6 +30,9 @@ final class Trip {
         status: TripStatus = .open,
         highlight: String = "",
         plannedItemCount: Int = 0,
+        completedItemCount: Int = 0,
+        travelerCount: Int = 1,
+        itineraryItems: [String] = [],
         latitude: Double? = nil,
         longitude: Double? = nil,
         createdAt: Date = .now,
@@ -42,6 +48,9 @@ final class Trip {
         self.status = status
         self.highlight = highlight
         self.plannedItemCount = max(0, plannedItemCount)
+        self.completedItemCount = min(max(0, completedItemCount), max(0, plannedItemCount))
+        self.travelerCount = max(1, travelerCount)
+        self.itineraryItems = itineraryItems
         self.latitude = latitude
         self.longitude = longitude
         self.createdAt = createdAt
@@ -68,6 +77,19 @@ final class Trip {
         validStartDateCount == 1 ? "1 possible start date" : "\(validStartDateCount) possible start dates"
     }
 
+    var travelerDisplayString: String {
+        travelerCount == 1 ? "1 traveler" : "\(travelerCount) travelers"
+    }
+
+    var progressDisplayString: String {
+        "\(completedItemCount) of \(plannedItemCount) planned"
+    }
+
+    var progressFraction: Double {
+        guard plannedItemCount > 0 else { return 0 }
+        return Double(completedItemCount) / Double(plannedItemCount)
+    }
+
     func updateWindow(start: Date, end: Date, calendar: Calendar = .current) {
         let normalizedStart = calendar.startOfDay(for: start)
         let normalizedEnd = calendar.startOfDay(for: end)
@@ -78,6 +100,15 @@ final class Trip {
 
     func updateDuration(days: Int) {
         durationDays = max(1, days)
+        updatedAt = .now
+    }
+
+    func updateProgress(completedItems: Int, plannedItems: Int? = nil) {
+        if let plannedItems {
+            plannedItemCount = max(0, plannedItems)
+        }
+
+        completedItemCount = min(max(0, completedItems), plannedItemCount)
         updatedAt = .now
     }
 
@@ -97,7 +128,11 @@ final class Trip {
             startDateSummary: startDateDisplayString,
             status: status,
             highlight: highlight,
-            plannedItemCount: plannedItemCount
+            plannedItemCount: plannedItemCount,
+            completedItemCount: completedItemCount,
+            travelerSummary: travelerDisplayString,
+            progressSummary: progressDisplayString,
+            progressFraction: progressFraction
         )
     }
 

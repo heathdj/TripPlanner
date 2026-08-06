@@ -40,6 +40,30 @@ struct TripPlannerFoundationTests {
     }
 
     @MainActor
+    @Test("Trip list facts expose travelers and progress", .bug("https://github.com/heathdj/TripPlanner/issues/4"))
+    func tripListFactsExposeTravelersAndProgress() {
+        let trip = Trip(
+            title: "Fact check",
+            location: "Test",
+            windowStartDate: date(year: 2026, month: 6, day: 1),
+            windowEndDate: date(year: 2026, month: 6, day: 10),
+            durationDays: 4,
+            plannedItemCount: 5,
+            completedItemCount: 9,
+            travelerCount: 0,
+            itineraryItems: ["Arrive", "Explore"]
+        )
+        let summary = trip.summary()
+
+        #expect(trip.completedItemCount == 5)
+        #expect(trip.travelerCount == 1)
+        #expect(trip.progressFraction == 1)
+        #expect(summary.travelerSummary == "1 traveler")
+        #expect(summary.progressSummary == "5 of 5 planned")
+        #expect(trip.itineraryItems == ["Arrive", "Explore"])
+    }
+
+    @MainActor
     @Test("Open trips sort by upcoming window", .bug("https://github.com/heathdj/TripPlanner/issues/2"))
     func openTripsSortByUpcomingWindow() {
         let late = trip(title: "Late", startDay: 20, endDay: 24, status: .open)
@@ -165,7 +189,10 @@ struct TripPlannerFoundationTests {
             durationDays: 4,
             status: .open,
             highlight: "Local food and museum mornings.",
-            plannedItemCount: 6
+            plannedItemCount: 6,
+            completedItemCount: 2,
+            travelerCount: 3,
+            itineraryItems: ["Museum morning", "Dinner reservation"]
         )
         let settings = TravelSettings(defaultDurationDays: 14, defaultWindowLengthDays: 45)
         let reviewedPlan = ReviewedTripPlan(
@@ -193,12 +220,26 @@ struct TripPlannerFoundationTests {
         #expect(persistedTrip.windowLengthDays == 15)
         #expect(persistedTrip.durationDays == 4)
         #expect(persistedTrip.validStartDateCount == 12)
+        #expect(persistedTrip.completedItemCount == 2)
+        #expect(persistedTrip.travelerDisplayString == "3 travelers")
+        #expect(persistedTrip.itineraryItems == ["Museum morning", "Dinner reservation"])
         #expect(persistedSetting.defaultDurationDays == 14)
         #expect(persistedSetting.defaultWindowLengthDays == 45)
         #expect(persistedSetting.distanceUnit == .kilometers)
         #expect(persistedSetting.nearYouDistanceKilometers == 100)
         #expect(persistedPlan.tripID == persistedTrip.id)
         #expect(persistedPlan.title == "Reviewed Santa Fe plan")
+    }
+
+    @MainActor
+    @Test("Sample trips include dashboard detail content", .bug("https://github.com/heathdj/TripPlanner/issues/4"))
+    func sampleTripsIncludeDashboardDetailContent() {
+        let trips = TripStore.sampleTrips
+
+        #expect(trips.count >= 3)
+        #expect(trips.allSatisfy { $0.travelerCount > 0 })
+        #expect(trips.allSatisfy { $0.plannedItemCount > 0 })
+        #expect(trips.allSatisfy { $0.itineraryItems.isEmpty == false })
     }
 
     @MainActor

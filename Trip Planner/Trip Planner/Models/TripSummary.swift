@@ -10,6 +10,10 @@ struct TripSummary: Identifiable, Hashable, Sendable {
     var status: TripStatus
     var highlight: String
     var plannedItemCount: Int
+    var completedItemCount: Int
+    var travelerSummary: String
+    var progressSummary: String
+    var progressFraction: Double
 
     init(
         id: UUID = UUID(),
@@ -20,7 +24,11 @@ struct TripSummary: Identifiable, Hashable, Sendable {
         startDateSummary: String,
         status: TripStatus,
         highlight: String,
-        plannedItemCount: Int
+        plannedItemCount: Int,
+        completedItemCount: Int = 0,
+        travelerSummary: String = "1 traveler",
+        progressSummary: String? = nil,
+        progressFraction: Double = 0
     ) {
         self.id = id
         self.title = title
@@ -31,5 +39,9 @@ struct TripSummary: Identifiable, Hashable, Sendable {
         self.status = status
         self.highlight = highlight
         self.plannedItemCount = plannedItemCount
+        self.completedItemCount = completedItemCount
+        self.travelerSummary = travelerSummary
+        self.progressSummary = progressSummary ?? "\(completedItemCount) of \(plannedItemCount) planned"
+        self.progressFraction = min(max(progressFraction, 0), 1)
     }
 }

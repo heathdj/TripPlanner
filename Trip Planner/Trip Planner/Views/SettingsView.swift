@@ -11,6 +11,7 @@ struct SettingsView: View {
 
     @State private var selectedIconName: String?
     @State private var iconErrorMessage: String?
+    @State private var createdSettings: TravelSettings?
 
     @MainActor
     init(
@@ -22,7 +23,7 @@ struct SettingsView: View {
     }
 
     private var travelSettings: TravelSettings? {
-        settings.first
+        settings.first ?? createdSettings
     }
 
     private var isShowingIconError: Binding<Bool> {
@@ -67,6 +68,7 @@ struct SettingsView: View {
         }
         .task {
             selectedIconName = iconManager.currentIconName
+            ensureTravelSettings()
         }
         .alert("App Icon Not Changed", isPresented: isShowingIconError) {
             Button("OK", role: .cancel) { }
@@ -77,6 +79,19 @@ struct SettingsView: View {
 
     private func saveSettings() {
         try? modelContext.save()
+    }
+
+    private func ensureTravelSettings() {
+        guard settings.isEmpty,
+              createdSettings == nil
+        else {
+            return
+        }
+
+        let newSettings = TravelSettings()
+        createdSettings = newSettings
+        modelContext.insert(newSettings)
+        saveSettings()
     }
 }
 
@@ -266,9 +281,6 @@ private struct DefaultsSection: View {
                             value: settings.nearYouDistanceDisplayString
                         )
                     }
-                } else {
-                    Text("Defaults are created when the app starts.")
-                        .foregroundStyle(.secondary)
                 }
             }
         }

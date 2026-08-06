@@ -5,6 +5,7 @@ import Foundation
 @Observable
 final class LocationService: NSObject {
     private let manager: CLLocationManager
+    private var locationRequestID = UUID()
 
     var authorizationStatus: CLAuthorizationStatus
     var currentLocation: CLLocation?
@@ -54,9 +55,57 @@ final class LocationService: NSObject {
         }
     }
 
+    func requestAccessOrRefreshLocation() {
+        errorMessage = nil
+
+        switch authorizationStatus {
+        case .notDetermined:
+            isRequestingLocation = true
+            manager.requestWhenInUseAuthorization()
+        case .authorizedAlways, .authorizedWhenInUse:
+            refreshLocationIfAuthorized()
+        case .denied, .restricted:
+            isRequestingLocation = false
+            currentLocation = nil
+        @unknown default:
+            isRequestingLocation = false
+        }
+    }
+
+    func refreshLocationIfAuthorized() {
+        guard canUseLocation,
+              currentLocation == nil,
+              isRequestingLocation == false
+        else {
+            return
+        }
+
+        requestCurrentLocation()
+    }
+
     private func requestCurrentLocation() {
+        locationRequestID = UUID()
         isRequestingLocation = true
+        manager.startUpdatingLocation()
         manager.requestLocation()
+        clearRequestIfLocationDoesNotArrive(requestID: locationRequestID)
+    }
+
+    private func clearRequestIfLocationDoesNotArrive(requestID: UUID) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(8))
+
+            guard locationRequestID == requestID,
+                  isRequestingLocation,
+                  currentLocation == nil
+            else {
+                return
+            }
+
+            manager.stopUpdatingLocation()
+            isRequestingLocation = false
+            errorMessage = "Location is enabled, but the device has not returned a location yet. In Simulator, choose a location from Features > Location and try again."
+        }
     }
 }
 
@@ -66,6 +115,8 @@ extension LocationService: CLLocationManagerDelegate {
             authorizationStatus = manager.authorizationStatus
 
             if canUseLocation {
+                isRequestingLocation = false
+                currentLocation = nil
                 requestCurrentLocation()
             } else if isDeniedOrRestricted {
                 isRequestingLocation = false
@@ -76,6 +127,7 @@ extension LocationService: CLLocationManagerDelegate {
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         Task { @MainActor in
+            manager.stopUpdatingLocation()
             currentLocation = locations.last
             isRequestingLocation = false
             errorMessage = nil
@@ -84,6 +136,7 @@ extension LocationService: CLLocationManagerDelegate {
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: any Error) {
         Task { @MainActor in
+            manager.stopUpdatingLocation()
             isRequestingLocation = false
             errorMessage = error.localizedDescription
         }

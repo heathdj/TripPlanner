@@ -99,6 +99,14 @@ The important architectural trick is that location is seasoning, not the meal. W
 
 Core Location also reminded us to keep privacy workflows explicit. A denied or restricted status is not an error avalanche; it is a state the UI can explain, with a clear path to system Settings when the user wants to change their mind.
 
+### 2026-08-05: Issue #4 Turns the Dashboard Into a Control Tower
+
+Issue `#4` changed the dashboard from a list of pretty cards into a real scanning surface. Cards now carry the facts a traveler reaches for first: destination, travel window, trip duration, travelers, progress, and nearby distance when location has promoted the trip.
+
+The detail sheet is the airport gate display for a single trip. It uses the same `Trip` model data, then adds a hero, facts, saved plan summary, and itinerary items. The saved plan section queries SwiftData directly, which matters because details should update when a reviewed plan is saved instead of showing yesterday's boarding pass.
+
+The lesson here is that "polished" is not just color and blur. Polish is hierarchy: the list answers "what needs my attention?", and the sheet answers "what is inside this trip?" without making the user decode a pile of equal-weight labels.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.
