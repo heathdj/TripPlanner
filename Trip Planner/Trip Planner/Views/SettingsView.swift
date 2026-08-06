@@ -55,6 +55,10 @@ struct SettingsView: View {
                                 settings: travelSettings,
                                 save: saveSettings
                             )
+                            ActivityInterestsSection(
+                                settings: travelSettings,
+                                save: saveSettings
+                            )
                             SupportSection(appInfo: appInfo)
                         }
                         .padding()
@@ -329,6 +333,172 @@ private struct DefaultsSection: View {
         case .miles:
             return 5...300
         }
+    }
+}
+
+private struct ActivityInterestsSection: View {
+    let settings: TravelSettings?
+    let save: () -> Void
+
+    @State private var customInterestName = ""
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 130), spacing: 10)
+    ]
+
+    var body: some View {
+        GlassPanel {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Activity Interests")
+                    .font(.headline)
+                    .fontDesign(.rounded)
+
+                Text("Interests stay on this device and are shared with the model only when you ask Trip Planner to generate a plan.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let settings {
+                    selectedInterestsSummary(for: settings)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Suggested")
+                            .font(.subheadline.weight(.semibold))
+
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
+                            ForEach(ActivityInterestCatalog.builtInInterests, id: \.self) { interest in
+                                InterestToggleButton(
+                                    title: interest,
+                                    isSelected: settings.isInterestSelected(interest)
+                                ) {
+                                    settings.toggleInterest(interest)
+                                    save()
+                                }
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Custom")
+                            .font(.subheadline.weight(.semibold))
+
+                        HStack(spacing: 10) {
+                            TextField("Add an interest", text: $customInterestName)
+                                .textInputAutocapitalization(.words)
+                                .autocorrectionDisabled()
+                                .textFieldStyle(.roundedBorder)
+                                .onSubmit {
+                                    addCustomInterest(to: settings)
+                                }
+
+                            Button("Add", systemImage: "plus") {
+                                addCustomInterest(to: settings)
+                            }
+                            .buttonStyle(.glassProminent)
+                            .disabled(trimmedCustomInterest.isEmpty)
+                        }
+
+                        if settings.customInterestNames.isEmpty {
+                            Text("Add custom interests like pottery, gardens, or jazz clubs.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
+                                ForEach(settings.customInterestNames, id: \.self) { interest in
+                                    CustomInterestChip(title: interest) {
+                                        settings.removeCustomInterest(interest)
+                                        save()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var trimmedCustomInterest: String {
+        customInterestName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func selectedInterestsSummary(for settings: TravelSettings) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Selected for generated plans")
+                .font(.subheadline.weight(.semibold))
+
+            if settings.visibleSelectedInterests.isEmpty {
+                Text("No interests selected yet.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(settings.visibleSelectedInterests.joined(separator: ", "))
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("Selected interests: \(settings.visibleSelectedInterests.joined(separator: ", "))")
+            }
+        }
+    }
+
+    private func addCustomInterest(to settings: TravelSettings) {
+        let interest = trimmedCustomInterest
+        guard interest.isEmpty == false else { return }
+
+        settings.addCustomInterest(interest)
+        customInterestName = ""
+        save()
+    }
+}
+
+private struct InterestToggleButton: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            action()
+        } label: {
+            Label(title, systemImage: isSelected ? "checkmark.circle.fill" : "circle")
+                .font(.caption.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(
+            isSelected ? .regular.tint(.teal.opacity(0.24)) : .regular,
+            in: .rect(cornerRadius: 12)
+        )
+        .accessibilityLabel(title)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityHint("Toggles this interest for generated trip plans")
+    }
+}
+
+private struct CustomInterestChip: View {
+    let title: String
+    let remove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .lineLimit(2)
+
+            Spacer(minLength: 4)
+
+            Button("Remove", systemImage: "xmark.circle.fill") {
+                remove()
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Remove \(title)")
+            .accessibilityHint("Removes this custom interest")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .glassEffect(.regular.tint(.teal.opacity(0.14)), in: .rect(cornerRadius: 12))
     }
 }
 

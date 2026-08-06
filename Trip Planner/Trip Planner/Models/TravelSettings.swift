@@ -8,6 +8,8 @@ final class TravelSettings {
     var defaultWindowLengthDays: Int
     var distanceUnitRawValue: String = DistanceUnit.kilometers.rawValue
     var nearYouDistanceKilometers: Double = TravelSettings.defaultNearYouDistanceKilometers
+    var selectedInterestNames: [String]
+    var customInterestNames: [String]
     var updatedAt: Date
 
     init(
@@ -16,6 +18,8 @@ final class TravelSettings {
         defaultWindowLengthDays: Int = TravelSettings.defaultWindowLengthDays,
         distanceUnit: DistanceUnit = .kilometers,
         nearYouDistanceKilometers: Double = TravelSettings.defaultNearYouDistanceKilometers,
+        selectedInterestNames: [String] = [],
+        customInterestNames: [String] = [],
         updatedAt: Date = .now
     ) {
         self.id = id
@@ -23,6 +27,8 @@ final class TravelSettings {
         self.defaultWindowLengthDays = max(1, defaultWindowLengthDays)
         self.distanceUnitRawValue = distanceUnit.rawValue
         self.nearYouDistanceKilometers = max(1, nearYouDistanceKilometers)
+        self.selectedInterestNames = Self.normalizedInterests(from: selectedInterestNames)
+        self.customInterestNames = Self.normalizedInterests(from: customInterestNames)
         self.updatedAt = updatedAt
     }
 
@@ -44,6 +50,12 @@ final class TravelSettings {
         "\(nearYouDistanceValue.formatted(.number.precision(.fractionLength(0)))) \(distanceUnit.symbol)"
     }
 
+    var visibleSelectedInterests: [String] {
+        let builtIns = ActivityInterestCatalog.builtInInterests.filter { isInterestSelected($0) }
+        let custom = customInterestNames.filter { isInterestSelected($0) }
+        return builtIns + custom
+    }
+
     func updateDefaultDuration(days: Int) {
         defaultDurationDays = max(1, days)
         updatedAt = .now
@@ -61,6 +73,58 @@ final class TravelSettings {
     func updateNearYouDistance(value: Double, unit: DistanceUnit) {
         nearYouDistanceKilometers = max(1, unit.kilometers(from: value))
         updatedAt = .now
+    }
+
+    func isInterestSelected(_ interest: String) -> Bool {
+        selectedInterestNames.contains { $0.localizedCaseInsensitiveCompare(interest) == .orderedSame }
+    }
+
+    func toggleInterest(_ interest: String) {
+        let normalized = interest.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalized.isEmpty == false else { return }
+
+        if let index = selectedInterestNames.firstIndex(where: { $0.localizedCaseInsensitiveCompare(normalized) == .orderedSame }) {
+            selectedInterestNames.remove(at: index)
+        } else {
+            selectedInterestNames.append(normalized)
+        }
+
+        updatedAt = .now
+    }
+
+    func addCustomInterest(_ interest: String) {
+        let normalized = interest.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalized.isEmpty == false else { return }
+
+        if customInterestNames.contains(where: { $0.localizedCaseInsensitiveCompare(normalized) == .orderedSame }) == false,
+           ActivityInterestCatalog.builtInInterests.contains(where: { $0.localizedCaseInsensitiveCompare(normalized) == .orderedSame }) == false {
+            customInterestNames.append(normalized)
+        }
+
+        if isInterestSelected(normalized) == false {
+            selectedInterestNames.append(normalized)
+        }
+
+        updatedAt = .now
+    }
+
+    func removeCustomInterest(_ interest: String) {
+        customInterestNames.removeAll { $0.localizedCaseInsensitiveCompare(interest) == .orderedSame }
+        selectedInterestNames.removeAll { $0.localizedCaseInsensitiveCompare(interest) == .orderedSame }
+        updatedAt = .now
+    }
+
+    private static func normalizedInterests(from interests: [String]) -> [String] {
+        interests.reduce(into: [String]()) { result, interest in
+            let normalized = interest.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard normalized.isEmpty == false,
+                  result.contains(where: { $0.localizedCaseInsensitiveCompare(normalized) == .orderedSame }) == false
+            else {
+                return
+            }
+
+            result.append(normalized)
+        }
     }
 
     static let defaultDurationDays = 14
