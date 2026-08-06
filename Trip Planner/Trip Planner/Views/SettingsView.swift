@@ -11,6 +11,7 @@ struct SettingsView: View {
 
     @State private var selectedIconName: String?
     @State private var iconErrorMessage: String?
+    @State private var createdSettings: TravelSettings?
 
     @MainActor
     init(
@@ -22,7 +23,7 @@ struct SettingsView: View {
     }
 
     private var travelSettings: TravelSettings? {
-        settings.first
+        settings.first ?? createdSettings
     }
 
     private var isShowingIconError: Binding<Bool> {
@@ -81,9 +82,15 @@ struct SettingsView: View {
     }
 
     private func ensureTravelSettings() {
-        guard settings.isEmpty else { return }
+        guard settings.isEmpty,
+              createdSettings == nil
+        else {
+            return
+        }
 
-        modelContext.insert(TravelSettings())
+        let newSettings = TravelSettings()
+        createdSettings = newSettings
+        modelContext.insert(newSettings)
         saveSettings()
     }
 }
