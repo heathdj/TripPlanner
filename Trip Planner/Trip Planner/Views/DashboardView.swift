@@ -66,6 +66,7 @@ struct DashboardView: View {
                             nearbyTrips: tripGroups.nearbyTrips,
                             distanceUnit: distanceUnit,
                             authorizationStatus: locationService.authorizationStatus,
+                            hasCurrentLocation: locationService.currentLocation != nil,
                             isRequestingLocation: locationService.isRequestingLocation,
                             errorMessage: locationService.errorMessage,
                             selectTrip: selectTrip,
@@ -109,6 +110,9 @@ struct DashboardView: View {
                 trip: trip,
                 distanceSummary: distanceSummary(for: trip)
             )
+        }
+        .task {
+            locationService.refreshLocationIfAuthorized()
         }
     }
 
@@ -176,6 +180,7 @@ private struct NearYouSection: View {
     let nearbyTrips: [NearbyTrip]
     let distanceUnit: DistanceUnit
     let authorizationStatus: CLAuthorizationStatus
+    let hasCurrentLocation: Bool
     let isRequestingLocation: Bool
     let errorMessage: String?
     let selectTrip: (Trip) -> Void
@@ -235,7 +240,13 @@ private struct NearYouSection: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if isDeniedOrRestricted {
+                if canUseLocation {
+                    if isRequestingLocation {
+                        ProgressView()
+                            .controlSize(.small)
+                            .accessibilityLabel("Finding nearby trips")
+                    }
+                } else if isDeniedOrRestricted {
                     Button("Open Settings", systemImage: "gearshape") {
                         openSystemSettings()
                     }
@@ -258,7 +269,7 @@ private struct NearYouSection: View {
         }
 
         if canUseLocation {
-            return "No nearby open trips"
+            return hasCurrentLocation ? "No nearby open trips" : "Finding nearby trips"
         }
 
         return "Find trips near you"
@@ -270,7 +281,11 @@ private struct NearYouSection: View {
         }
 
         if canUseLocation {
-            return "Open trips outside your Near You distance stay in the Open Trips section."
+            if hasCurrentLocation {
+                return "Open trips outside your Near You distance stay in the Open Trips section."
+            }
+
+            return "Trip Planner has location access while you use the app and is checking for nearby open trips."
         }
 
         return "Use your current location to promote nearby open trips into this section."
@@ -281,7 +296,7 @@ private struct NearYouSection: View {
     }
 
     private var requestButtonTitle: String {
-        isRequestingLocation ? "Finding Location" : "Use My Location"
+        isRequestingLocation ? "Finding Location" : "Enable Location"
     }
 }
 
