@@ -7,6 +7,7 @@ struct TripDetailView: View {
 
     let trip: Trip
     var distanceSummary: String?
+    var openDirections: (ItineraryItem, Trip) -> Void = AppleMapsDirectionsService.openDirections
 
     private var savedPlan: ReviewedTripPlan? {
         reviewedPlans
@@ -26,7 +27,11 @@ struct TripDetailView: View {
                         DetailHero(trip: trip, distanceSummary: distanceSummary)
                         TripFactsGrid(trip: trip, distanceSummary: distanceSummary)
                         SavedPlanSection(plan: savedPlan)
-                        ItinerarySection(items: trip.itineraryItems)
+                        ItinerarySection(
+                            trip: trip,
+                            items: trip.itineraryItems,
+                            openDirections: openDirections
+                        )
                     }
                     .padding()
                     .frame(maxWidth: 760)
@@ -229,7 +234,9 @@ private struct SavedPlanSection: View {
 }
 
 private struct ItinerarySection: View {
-    let items: [String]
+    let trip: Trip
+    let items: [ItineraryItem]
+    let openDirections: (ItineraryItem, Trip) -> Void
 
     var body: some View {
         GlassPanel {
@@ -243,25 +250,82 @@ private struct ItinerarySection: View {
                         .foregroundStyle(.secondary)
                 } else {
                     VStack(alignment: .leading, spacing: 10) {
-                        ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                            HStack(alignment: .top, spacing: 10) {
-                                Text("\(index + 1)")
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(.white)
-                                    .frame(width: 24, height: 24)
-                                    .background(.teal, in: .circle)
-                                    .accessibilityHidden(true)
-
-                                Text(item)
-                                    .font(.callout)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            .accessibilityElement(children: .combine)
-                            .accessibilityLabel("Itinerary item \(index + 1), \(item)")
+                        ForEach(items) { item in
+                            ItineraryItemRow(
+                                trip: trip,
+                                item: item,
+                                openDirections: openDirections
+                            )
                         }
                     }
                 }
             }
         }
+    }
+}
+
+private struct ItineraryItemRow: View {
+    let trip: Trip
+    let item: ItineraryItem
+    let openDirections: (ItineraryItem, Trip) -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: item.category.systemImage)
+                .font(.headline)
+                .foregroundStyle(.white)
+                .frame(width: 34, height: 34)
+                .background(.teal, in: .circle)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(item.name)
+                        .font(.subheadline.weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 8)
+
+                    Text(item.dayDisplayString)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack(spacing: 8) {
+                    Text(item.category.displayName)
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .glassEffect(.regular.tint(.teal.opacity(0.14)), in: .capsule)
+
+                    if item.hasCoordinate {
+                        Label("Exact", systemImage: "mappin.and.ellipse")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Label("Search", systemImage: "magnifyingglass")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if item.notesOrAddress.isEmpty == false {
+                    Text(item.notesOrAddress)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Button("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill") {
+                    openDirections(item, trip)
+                }
+                .buttonStyle(.glass)
+                .accessibilityLabel(item.directionsAccessibilityLabel)
+                .accessibilityHint("Opens driving directions in Apple Maps")
+            }
+        }
+        .padding(12)
+        .glassEffect(.regular.tint(.teal.opacity(0.08)), in: .rect(cornerRadius: 16))
+        .accessibilityElement(children: .contain)
     }
 }

@@ -19,7 +19,7 @@ struct TripPlannerFoundationTests {
         #expect(trip.windowLengthDays == 15)
         #expect(trip.durationDays == 4)
         #expect(trip.validStartDateCount == 12)
-        #expect(trip.durationDisplayString == "4 days away")
+        #expect(trip.durationDisplayString == "4 days")
         #expect(trip.startDateDisplayString == "12 possible start dates")
     }
 
@@ -51,7 +51,10 @@ struct TripPlannerFoundationTests {
             plannedItemCount: 5,
             completedItemCount: 9,
             travelerCount: 0,
-            itineraryItems: ["Arrive", "Explore"]
+            itineraryItems: [
+                ItineraryItem(name: "Arrive", category: .transit, dayNumber: 0),
+                ItineraryItem(name: "Explore", category: .activity, dayNumber: 2)
+            ]
         )
         let summary = trip.summary()
 
@@ -60,7 +63,68 @@ struct TripPlannerFoundationTests {
         #expect(trip.progressFraction == 1)
         #expect(summary.travelerSummary == "1 traveler")
         #expect(summary.progressSummary == "5 of 5 planned")
-        #expect(trip.itineraryItems == ["Arrive", "Explore"])
+        #expect(trip.itineraryItems.map(\.name) == ["Arrive", "Explore"])
+        #expect(trip.itineraryItems[0].dayNumber == 1)
+    }
+
+    @MainActor
+    @Test("Itinerary items model directions data safely", .bug("https://github.com/heathdj/TripPlanner/issues/5"))
+    func itineraryItemsModelDirectionsDataSafely() {
+        let exact = ItineraryItem(
+            name: "Museum",
+            notesOrAddress: "100 Main St",
+            category: .activity,
+            dayNumber: 2,
+            latitude: 41.88,
+            longitude: -87.63
+        )
+        let generated = ItineraryItem(
+            name: "Best ramen",
+            notesOrAddress: "near station",
+            category: .food,
+            dayNumber: -4
+        )
+        let trip = Trip(
+            title: "Tokyo",
+            location: "Tokyo, Japan",
+            windowStartDate: date(year: 2026, month: 7, day: 1),
+            windowEndDate: date(year: 2026, month: 7, day: 8),
+            durationDays: 4,
+            itineraryItems: [exact, generated]
+        )
+
+        #expect(exact.hasCoordinate)
+        #expect(generated.hasCoordinate == false)
+        #expect(generated.dayNumber == 1)
+        #expect(generated.searchableDestination(in: trip) == "Best ramen, near station, Tokyo, Japan")
+        #expect(generated.directionsAccessibilityLabel == "Directions to Best ramen")
+    }
+
+    @MainActor
+    @Test("Apple Maps fallback searches trip-scoped destinations", .bug("https://github.com/heathdj/TripPlanner/issues/5"))
+    func appleMapsFallbackSearchesTripScopedDestinations() throws {
+        let trip = Trip(
+            title: "Austin",
+            location: "Austin, Texas",
+            windowStartDate: date(year: 2026, month: 8, day: 1),
+            windowEndDate: date(year: 2026, month: 8, day: 6),
+            durationDays: 3
+        )
+        let item = ItineraryItem(
+            name: "Breakfast tacos",
+            notesOrAddress: "near South Congress",
+            category: .food,
+            dayNumber: 1
+        )
+
+        let url = try #require(AppleMapsDirectionsService.searchDirectionsURL(for: item, in: trip))
+        let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let queryItems = components.queryItems ?? []
+
+        #expect(components.host == "maps.apple.com")
+        #expect(queryItems.first { $0.name == "daddr" }?.value == "Breakfast tacos, near South Congress, Austin, Texas")
+        #expect(queryItems.first { $0.name == "dirflg" }?.value == "d")
+        #expect(AppleMapsDirectionsService.coordinateMapItem(for: item) == nil)
     }
 
     @MainActor
@@ -192,7 +256,10 @@ struct TripPlannerFoundationTests {
             plannedItemCount: 6,
             completedItemCount: 2,
             travelerCount: 3,
-            itineraryItems: ["Museum morning", "Dinner reservation"]
+            itineraryItems: [
+                ItineraryItem(name: "Museum morning", category: .activity, dayNumber: 1),
+                ItineraryItem(name: "Dinner reservation", category: .food, dayNumber: 2)
+            ]
         )
         let settings = TravelSettings(defaultDurationDays: 14, defaultWindowLengthDays: 45)
         let reviewedPlan = ReviewedTripPlan(
@@ -222,7 +289,8 @@ struct TripPlannerFoundationTests {
         #expect(persistedTrip.validStartDateCount == 12)
         #expect(persistedTrip.completedItemCount == 2)
         #expect(persistedTrip.travelerDisplayString == "3 travelers")
-        #expect(persistedTrip.itineraryItems == ["Museum morning", "Dinner reservation"])
+        #expect(persistedTrip.itineraryItems.map(\.name) == ["Museum morning", "Dinner reservation"])
+        #expect(persistedTrip.itineraryItems.map(\.category) == [.activity, .food])
         #expect(persistedSetting.defaultDurationDays == 14)
         #expect(persistedSetting.defaultWindowLengthDays == 45)
         #expect(persistedSetting.distanceUnit == .kilometers)
@@ -240,6 +308,8 @@ struct TripPlannerFoundationTests {
         #expect(trips.allSatisfy { $0.travelerCount > 0 })
         #expect(trips.allSatisfy { $0.plannedItemCount > 0 })
         #expect(trips.allSatisfy { $0.itineraryItems.isEmpty == false })
+        #expect(trips.flatMap(\.itineraryItems).contains { $0.hasCoordinate })
+        #expect(trips.flatMap(\.itineraryItems).contains { $0.hasCoordinate == false })
     }
 
     @MainActor
