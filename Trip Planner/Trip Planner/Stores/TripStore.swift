@@ -1,4 +1,20 @@
+import CoreLocation
 import Foundation
+
+struct NearbyTrip: Identifiable {
+    let trip: Trip
+    let distanceMeters: CLLocationDistance
+
+    var id: UUID {
+        trip.id
+    }
+}
+
+struct TripGroups {
+    let nearbyTrips: [NearbyTrip]
+    let openTrips: [Trip]
+    let closedTrips: [Trip]
+}
 
 @MainActor
 enum TripStore {
@@ -28,6 +44,49 @@ enum TripStore {
         sortedOpenTrips(trips) + sortedClosedTrips(trips)
     }
 
+    static func groupedTrips(
+        _ trips: [Trip],
+        userLocation: CLLocation?,
+        nearYouDistanceKilometers: Double
+    ) -> TripGroups {
+        let openTrips = sortedOpenTrips(trips)
+        let closedTrips = sortedClosedTrips(trips)
+
+        guard let userLocation else {
+            return TripGroups(
+                nearbyTrips: [],
+                openTrips: openTrips,
+                closedTrips: closedTrips
+            )
+        }
+
+        let radiusMeters = max(1, nearYouDistanceKilometers) * 1_000
+        let nearbyTrips = openTrips
+            .compactMap { trip -> NearbyTrip? in
+                guard let distanceMeters = distanceMeters(from: userLocation, to: trip),
+                      distanceMeters <= radiusMeters
+                else {
+                    return nil
+                }
+
+                return NearbyTrip(trip: trip, distanceMeters: distanceMeters)
+            }
+            .sorted {
+                if $0.distanceMeters == $1.distanceMeters {
+                    return $0.trip.title.localizedStandardCompare($1.trip.title) == .orderedAscending
+                }
+                return $0.distanceMeters < $1.distanceMeters
+            }
+
+        let nearbyIDs = Set(nearbyTrips.map(\.trip.id))
+
+        return TripGroups(
+            nearbyTrips: nearbyTrips,
+            openTrips: openTrips.filter { nearbyIDs.contains($0.id) == false },
+            closedTrips: closedTrips
+        )
+    }
+
     static func summaries(from trips: [Trip]) -> [TripSummary] {
         sortedTrips(trips).map { $0.summary() }
     }
@@ -43,7 +102,9 @@ enum TripStore {
                 durationDays: 4,
                 status: .open,
                 highlight: "Coffee walks, ferries, tide pools, and a quiet cabin night.",
-                plannedItemCount: 14
+                plannedItemCount: 14,
+                latitude: 47.6062,
+                longitude: -122.3321
             ),
             Trip(
                 id: UUID(uuidString: "559456CE-F943-45BA-9B98-66E69A9229E8") ?? UUID(),
@@ -54,7 +115,9 @@ enum TripStore {
                 durationDays: 3,
                 status: .open,
                 highlight: "Live music, barbecue, and a Sunday swim stop.",
-                plannedItemCount: 8
+                plannedItemCount: 8,
+                latitude: 30.2672,
+                longitude: -97.7431
             ),
             Trip(
                 id: UUID(uuidString: "96B6AE50-D84C-4E87-BAB4-0FB9C86D5E80") ?? UUID(),
@@ -65,9 +128,21 @@ enum TripStore {
                 durationDays: 10,
                 status: .closed,
                 highlight: "Temples, rail hops, market breakfasts, and garden time.",
-                plannedItemCount: 22
+                plannedItemCount: 22,
+                latitude: 35.0116,
+                longitude: 135.7681
             )
         ]
+    }
+
+    private static func distanceMeters(from location: CLLocation, to trip: Trip) -> CLLocationDistance? {
+        guard let latitude = trip.latitude,
+              let longitude = trip.longitude
+        else {
+            return nil
+        }
+
+        return location.distance(from: CLLocation(latitude: latitude, longitude: longitude))
     }
 
     private static func sampleDate(year: Int, month: Int, day: Int) -> Date {

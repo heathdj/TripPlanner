@@ -91,6 +91,14 @@ The important pattern is that Settings does not pretend icon changes are guarant
 
 Bug follow-up: the first Settings preview tried to load the raw icon layer filenames directly. Those files live inside Icon Composer bundles, so they are not ordinary named images at runtime. The fix was to mirror the same artwork into dedicated preview image sets in `Assets.xcassets`, keeping the real `.icon` bundles for iOS and giving SwiftUI a dependable image catalog lookup.
 
+### 2026-08-05: Issue #3 Sorts the Suitcases by Distance
+
+Issue `#3` gave the dashboard a traveler's sense of "near me" without making location a toll booth. Trips now have optional coordinates, Settings owns the user's preferred unit and Near You radius, and the dashboard only asks for location after the user taps the button.
+
+The important architectural trick is that location is seasoning, not the meal. Without permission, Open Trips and Closed Trips still render normally. With permission, nearby open trips are promoted into their own section and removed from Open Trips so the same trip does not show up wearing two name tags.
+
+Core Location also reminded us to keep privacy workflows explicit. A denied or restricted status is not an error avalanche; it is a state the UI can explain, with a clear path to system Settings when the user wants to change their mind.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.
