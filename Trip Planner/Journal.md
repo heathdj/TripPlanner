@@ -107,6 +107,12 @@ The detail sheet is the airport gate display for a single trip. It uses the same
 
 The lesson here is that "polished" is not just color and blur. Polish is hierarchy: the list answers "what needs my attention?", and the sheet answers "what is inside this trip?" without making the user decode a pile of equal-weight labels.
 
+### 2026-08-05: Issue #5 Gives Each Stop Its Own Compass
+
+Issue `#5` turned itinerary lines from plain text into real trip stops. Each item now knows its name, notes or address, category, day number, and optional coordinates. That lets the detail sheet treat a hotel, taco stop, hike, and ferry ride differently without inventing four separate mini-models.
+
+The Maps behavior follows a practical rule: if we have coordinates, route to the pin; if we only have generated text, build a destination search that includes the trip location. Missing coordinates are not a failure case. They are just a fuzzier kind of destination, so the UI still offers directions instead of making the user copy text by hand.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

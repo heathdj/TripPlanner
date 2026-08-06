@@ -106,10 +106,34 @@ enum TripStore {
                 completedItemCount: 6,
                 travelerCount: 2,
                 itineraryItems: [
-                    "Pike Place breakfast walk",
-                    "Bainbridge ferry loop",
-                    "Cannon Beach tide pools",
-                    "Cabin dinner on the coast"
+                    ItineraryItem(
+                        name: "Pike Place Market",
+                        notesOrAddress: "85 Pike St, Seattle, WA",
+                        category: .food,
+                        dayNumber: 1,
+                        latitude: 47.6097,
+                        longitude: -122.3425
+                    ),
+                    ItineraryItem(
+                        name: "Bainbridge ferry loop",
+                        notesOrAddress: "Seattle ferry terminal",
+                        category: .transit,
+                        dayNumber: 2
+                    ),
+                    ItineraryItem(
+                        name: "Cannon Beach tide pools",
+                        notesOrAddress: "Haystack Rock, Cannon Beach, OR",
+                        category: .activity,
+                        dayNumber: 3,
+                        latitude: 45.8845,
+                        longitude: -123.9651
+                    ),
+                    ItineraryItem(
+                        name: "Coast cabin",
+                        notesOrAddress: "Quiet cabin night near Cannon Beach",
+                        category: .stay,
+                        dayNumber: 3
+                    )
                 ],
                 latitude: 47.6062,
                 longitude: -122.3321
@@ -127,10 +151,36 @@ enum TripStore {
                 completedItemCount: 3,
                 travelerCount: 4,
                 itineraryItems: [
-                    "South Congress check-in",
-                    "East Austin barbecue lunch",
-                    "Red River live music",
-                    "Barton Springs morning swim"
+                    ItineraryItem(
+                        name: "South Congress Hotel",
+                        notesOrAddress: "1603 S Congress Ave, Austin, TX",
+                        category: .stay,
+                        dayNumber: 1,
+                        latitude: 30.2490,
+                        longitude: -97.7495
+                    ),
+                    ItineraryItem(
+                        name: "East Austin barbecue lunch",
+                        notesOrAddress: "barbecue near East 11th Street",
+                        category: .food,
+                        dayNumber: 2
+                    ),
+                    ItineraryItem(
+                        name: "Red River live music",
+                        notesOrAddress: "Red River Cultural District",
+                        category: .activity,
+                        dayNumber: 2,
+                        latitude: 30.2695,
+                        longitude: -97.7367
+                    ),
+                    ItineraryItem(
+                        name: "Barton Springs Pool",
+                        notesOrAddress: "2201 Barton Springs Rd, Austin, TX",
+                        category: .activity,
+                        dayNumber: 3,
+                        latitude: 30.2641,
+                        longitude: -97.7713
+                    )
                 ],
                 latitude: 30.2672,
                 longitude: -97.7431
@@ -148,10 +198,34 @@ enum TripStore {
                 completedItemCount: 22,
                 travelerCount: 2,
                 itineraryItems: [
-                    "Fushimi Inari sunrise",
-                    "Nishiki Market breakfast",
-                    "Arashiyama rail hop",
-                    "Philosopher's Path garden afternoon"
+                    ItineraryItem(
+                        name: "Fushimi Inari Taisha",
+                        notesOrAddress: "68 Fukakusa Yabunouchicho, Fushimi Ward",
+                        category: .activity,
+                        dayNumber: 1,
+                        latitude: 34.9671,
+                        longitude: 135.7727
+                    ),
+                    ItineraryItem(
+                        name: "Nishiki Market breakfast",
+                        notesOrAddress: "Nishikikoji-dori, Kyoto",
+                        category: .food,
+                        dayNumber: 2
+                    ),
+                    ItineraryItem(
+                        name: "Arashiyama rail hop",
+                        notesOrAddress: "Saga-Arashiyama Station",
+                        category: .transit,
+                        dayNumber: 3,
+                        latitude: 35.0186,
+                        longitude: 135.6812
+                    ),
+                    ItineraryItem(
+                        name: "Philosopher's Path garden afternoon",
+                        notesOrAddress: "Sakyo Ward, Kyoto",
+                        category: .activity,
+                        dayNumber: 4
+                    )
                 ],
                 latitude: 35.0116,
                 longitude: 135.7681

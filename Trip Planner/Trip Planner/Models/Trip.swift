@@ -14,7 +14,7 @@ final class Trip {
     var plannedItemCount: Int
     var completedItemCount: Int
     var travelerCount: Int
-    var itineraryItems: [String]
+    var itineraryItems: [ItineraryItem]
     var latitude: Double?
     var longitude: Double?
     var createdAt: Date
@@ -32,7 +32,7 @@ final class Trip {
         plannedItemCount: Int = 0,
         completedItemCount: Int = 0,
         travelerCount: Int = 1,
-        itineraryItems: [String] = [],
+        itineraryItems: [ItineraryItem] = [],
         latitude: Double? = nil,
         longitude: Double? = nil,
         createdAt: Date = .now,
