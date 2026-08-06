@@ -8,6 +8,7 @@ struct DashboardView: View {
     @Query private var settings: [TravelSettings]
 
     @State private var locationService = LocationService()
+    @State private var selectedTrip: Trip?
 
     private let columns = [
         GridItem(.adaptive(minimum: 280), spacing: 16)
@@ -67,6 +68,7 @@ struct DashboardView: View {
                             authorizationStatus: locationService.authorizationStatus,
                             isRequestingLocation: locationService.isRequestingLocation,
                             errorMessage: locationService.errorMessage,
+                            selectTrip: selectTrip,
                             requestLocation: locationService.requestLocationAccess,
                             openSystemSettings: openSystemSettings
                         )
@@ -75,14 +77,16 @@ struct DashboardView: View {
                             title: "Open Trips",
                             emptyTitle: "No open trips",
                             trips: openTrips,
-                            columns: columns
+                            columns: columns,
+                            selectTrip: selectTrip
                         )
 
                         TripSection(
                             title: "Closed Trips",
                             emptyTitle: "No closed trips",
                             trips: closedTrips,
-                            columns: columns
+                            columns: columns,
+                            selectTrip: selectTrip
                         )
                     }
                     .padding()
@@ -100,11 +104,27 @@ struct DashboardView: View {
                 }
             }
         }
+        .sheet(item: $selectedTrip) { trip in
+            TripDetailView(
+                trip: trip,
+                distanceSummary: distanceSummary(for: trip)
+            )
+        }
     }
 
     private func openSystemSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
+    }
+
+    private func selectTrip(_ trip: Trip) {
+        selectedTrip = trip
+    }
+
+    private func distanceSummary(for trip: Trip) -> String? {
+        tripGroups.nearbyTrips
+            .first { $0.trip.id == trip.id }
+            .map { distanceUnit.formattedDistance(meters: $0.distanceMeters) }
     }
 }
 
@@ -158,6 +178,7 @@ private struct NearYouSection: View {
     let authorizationStatus: CLAuthorizationStatus
     let isRequestingLocation: Bool
     let errorMessage: String?
+    let selectTrip: (Trip) -> Void
     let requestLocation: () -> Void
     let openSystemSettings: () -> Void
 
@@ -184,9 +205,10 @@ private struct NearYouSection: View {
             } else {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
                     ForEach(nearbyTrips) { nearbyTrip in
-                        TripSummaryCard(
-                            trip: nearbyTrip.trip.summary(),
-                            distanceSummary: distanceUnit.formattedDistance(meters: nearbyTrip.distanceMeters)
+                        TripCardButton(
+                            trip: nearbyTrip.trip,
+                            distanceSummary: distanceUnit.formattedDistance(meters: nearbyTrip.distanceMeters),
+                            selectTrip: selectTrip
                         )
                     }
                 }
@@ -268,6 +290,7 @@ private struct TripSection: View {
     let emptyTitle: String
     let trips: [Trip]
     let columns: [GridItem]
+    let selectTrip: (Trip) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -284,11 +307,48 @@ private struct TripSection: View {
             } else {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
                     ForEach(trips) { trip in
-                        TripSummaryCard(trip: trip.summary())
+                        TripCardButton(
+                            trip: trip,
+                            selectTrip: selectTrip
+                        )
                     }
                 }
             }
         }
+    }
+}
+
+private struct TripCardButton: View {
+    let trip: Trip
+    var distanceSummary: String? = nil
+    let selectTrip: (Trip) -> Void
+
+    var body: some View {
+        Button {
+            selectTrip(trip)
+        } label: {
+            TripSummaryCard(
+                trip: trip.summary(),
+                distanceSummary: distanceSummary
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint("Opens trip details")
+    }
+
+    private var accessibilityLabel: String {
+        [
+            trip.title,
+            trip.location,
+            trip.windowDisplayString,
+            trip.durationDisplayString,
+            trip.travelerDisplayString,
+            trip.progressDisplayString,
+            distanceSummary
+        ]
+            .compactMap { $0 }
+            .joined(separator: ", ")
     }
 }
 
@@ -330,10 +390,29 @@ private struct TripSummaryCard: View {
                     }
                     Label(trip.dateRange, systemImage: "calendar")
                     Label(trip.durationSummary, systemImage: "clock")
+                    Label(trip.travelerSummary, systemImage: "person.2.fill")
                     Label(trip.startDateSummary, systemImage: "arrow.triangle.branch")
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Progress")
+                            .font(.caption.weight(.semibold))
+
+                        Spacer()
+
+                        Text(trip.progressSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    ProgressView(value: trip.progressFraction)
+                        .tint(.teal)
+                        .accessibilityLabel("Trip progress")
+                        .accessibilityValue(trip.progressSummary)
+                }
 
                 HStack {
                     Text(trip.status.rawValue)
@@ -344,7 +423,7 @@ private struct TripSummaryCard: View {
 
                     Spacer(minLength: 12)
 
-                    Text("\(trip.plannedItemCount) planned")
+                    Text("\(trip.plannedItemCount) items")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -377,7 +456,7 @@ private struct AmbientMapBackground: View {
     }
 }
 
-private struct MapGridPattern: Shape {
+struct MapGridPattern: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
         let spacing: CGFloat = 72

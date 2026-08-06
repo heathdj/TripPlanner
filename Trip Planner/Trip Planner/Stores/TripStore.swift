@@ -103,6 +103,14 @@ enum TripStore {
                 status: .open,
                 highlight: "Coffee walks, ferries, tide pools, and a quiet cabin night.",
                 plannedItemCount: 14,
+                completedItemCount: 6,
+                travelerCount: 2,
+                itineraryItems: [
+                    "Pike Place breakfast walk",
+                    "Bainbridge ferry loop",
+                    "Cannon Beach tide pools",
+                    "Cabin dinner on the coast"
+                ],
                 latitude: 47.6062,
                 longitude: -122.3321
             ),
@@ -116,6 +124,14 @@ enum TripStore {
                 status: .open,
                 highlight: "Live music, barbecue, and a Sunday swim stop.",
                 plannedItemCount: 8,
+                completedItemCount: 3,
+                travelerCount: 4,
+                itineraryItems: [
+                    "South Congress check-in",
+                    "East Austin barbecue lunch",
+                    "Red River live music",
+                    "Barton Springs morning swim"
+                ],
                 latitude: 30.2672,
                 longitude: -97.7431
             ),
@@ -129,6 +145,14 @@ enum TripStore {
                 status: .closed,
                 highlight: "Temples, rail hops, market breakfasts, and garden time.",
                 plannedItemCount: 22,
+                completedItemCount: 22,
+                travelerCount: 2,
+                itineraryItems: [
+                    "Fushimi Inari sunrise",
+                    "Nishiki Market breakfast",
+                    "Arashiyama rail hop",
+                    "Philosopher's Path garden afternoon"
+                ],
                 latitude: 35.0116,
                 longitude: 135.7681
             )
