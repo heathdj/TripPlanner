@@ -113,6 +113,12 @@ Issue `#5` turned itinerary lines from plain text into real trip stops. Each ite
 
 The Maps behavior follows a practical rule: if we have coordinates, route to the pin; if we only have generated text, build a destination search that includes the trip location. Missing coordinates are not a failure case. They are just a fuzzier kind of destination, so the UI still offers directions instead of making the user copy text by hand.
 
+### 2026-08-05: Issue #6 Lets Preferences Have a Memory
+
+Issue `#6` gave travelers a reusable activity palette. Suggested interests cover the common travel moods, and custom interests catch the personal details: pottery, gardens, jazz clubs, or whatever else makes a trip feel like theirs.
+
+The design choice is privacy-first persistence. Interests live in `TravelSettings`, stay local across launches, and are only meant to leave the device when the traveler explicitly asks for plan generation. The model gets better context, but the app does not quietly turn preferences into background chatter.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

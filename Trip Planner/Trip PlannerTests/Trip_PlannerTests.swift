@@ -173,6 +173,42 @@ struct TripPlannerFoundationTests {
     }
 
     @MainActor
+    @Test("Travel settings manage reusable activity interests", .bug("https://github.com/heathdj/TripPlanner/issues/6"))
+    func travelSettingsManageReusableActivityInterests() {
+        let settings = TravelSettings()
+
+        #expect(ActivityInterestCatalog.builtInInterests == [
+            "Museums",
+            "Hikes",
+            "Live Events",
+            "Local Food",
+            "Architecture",
+            "Beaches",
+            "History",
+            "Nightlife",
+            "Shopping",
+            "Photography"
+        ])
+
+        settings.toggleInterest("Museums")
+        settings.toggleInterest("Local Food")
+        settings.addCustomInterest(" pottery ")
+        settings.addCustomInterest("Pottery")
+
+        #expect(settings.isInterestSelected("museums"))
+        #expect(settings.selectedInterestNames == ["Museums", "Local Food", "pottery"])
+        #expect(settings.customInterestNames == ["pottery"])
+        #expect(settings.visibleSelectedInterests == ["Museums", "Local Food", "pottery"])
+
+        settings.toggleInterest("Museums")
+        settings.removeCustomInterest("POTTERY")
+
+        #expect(settings.isInterestSelected("Museums") == false)
+        #expect(settings.selectedInterestNames == ["Local Food"])
+        #expect(settings.customInterestNames.isEmpty)
+    }
+
+    @MainActor
     @Test("Nearby grouping promotes only open trips inside the radius", .bug("https://github.com/heathdj/TripPlanner/issues/3"))
     func nearbyGroupingPromotesOpenTripsInsideRadius() {
         let userLocation = CLLocation(latitude: 41.8781, longitude: -87.6298)
@@ -297,6 +333,33 @@ struct TripPlannerFoundationTests {
         #expect(persistedSetting.nearYouDistanceKilometers == 100)
         #expect(persistedPlan.tripID == persistedTrip.id)
         #expect(persistedPlan.title == "Reviewed Santa Fe plan")
+    }
+
+    @MainActor
+    @Test("Custom interests persist through SwiftData", .bug("https://github.com/heathdj/TripPlanner/issues/6"))
+    func customInterestsPersistThroughSwiftData() throws {
+        let storeURL = temporaryStoreURL()
+        try removeStore(at: storeURL)
+        defer { try? removeStore(at: storeURL) }
+
+        let firstContainer = try makeContainer(at: storeURL)
+        let firstContext = ModelContext(firstContainer)
+        let settings = TravelSettings()
+        settings.toggleInterest("Hikes")
+        settings.addCustomInterest("Gardens")
+        settings.addCustomInterest("Jazz Clubs")
+
+        firstContext.insert(settings)
+        try firstContext.save()
+
+        let secondContainer = try makeContainer(at: storeURL)
+        let secondContext = ModelContext(secondContainer)
+        let persistedSettings = try secondContext.fetch(FetchDescriptor<TravelSettings>())
+        let persistedSetting = try #require(persistedSettings.first)
+
+        #expect(persistedSetting.selectedInterestNames == ["Hikes", "Gardens", "Jazz Clubs"])
+        #expect(persistedSetting.customInterestNames == ["Gardens", "Jazz Clubs"])
+        #expect(persistedSetting.visibleSelectedInterests == ["Hikes", "Gardens", "Jazz Clubs"])
     }
 
     @MainActor
