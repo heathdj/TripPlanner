@@ -18,7 +18,6 @@ final class LocationService: NSObject {
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyKilometer
-        refreshLocationIfAuthorized()
     }
 
     var canUseLocation: Bool {
@@ -55,6 +54,23 @@ final class LocationService: NSObject {
         }
     }
 
+    func requestAccessOrRefreshLocation() {
+        errorMessage = nil
+
+        switch authorizationStatus {
+        case .notDetermined:
+            isRequestingLocation = true
+            manager.requestWhenInUseAuthorization()
+        case .authorizedAlways, .authorizedWhenInUse:
+            refreshLocationIfAuthorized()
+        case .denied, .restricted:
+            isRequestingLocation = false
+            currentLocation = nil
+        @unknown default:
+            isRequestingLocation = false
+        }
+    }
+
     func refreshLocationIfAuthorized() {
         guard canUseLocation,
               currentLocation == nil,
@@ -78,7 +94,9 @@ extension LocationService: CLLocationManagerDelegate {
             authorizationStatus = manager.authorizationStatus
 
             if canUseLocation {
-                refreshLocationIfAuthorized()
+                isRequestingLocation = false
+                currentLocation = nil
+                requestCurrentLocation()
             } else if isDeniedOrRestricted {
                 isRequestingLocation = false
                 currentLocation = nil

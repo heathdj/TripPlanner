@@ -112,7 +112,7 @@ struct DashboardView: View {
             )
         }
         .task {
-            locationService.refreshLocationIfAuthorized()
+            locationService.requestAccessOrRefreshLocation()
         }
     }
 
