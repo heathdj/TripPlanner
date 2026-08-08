@@ -41,8 +41,8 @@ struct TripPlannerFoundationTests {
     }
 
     @MainActor
-    @Test("Trip list facts expose travelers and progress", .bug("https://github.com/heathdj/TripPlanner/issues/4"))
-    func tripListFactsExposeTravelersAndProgress() {
+    @Test("Trip list facts expose travelers and exact itinerary progress", .bug("https://github.com/heathdj/TripPlanner/issues/4"))
+    func tripListFactsExposeTravelersAndExactItineraryProgress() {
         let trip = Trip(
             title: "Fact check",
             location: "Test",
@@ -53,7 +53,7 @@ struct TripPlannerFoundationTests {
             completedItemCount: 9,
             travelerCount: 0,
             itineraryItems: [
-                ItineraryItem(name: "Arrive", category: .transit, dayNumber: 0),
+                ItineraryItem(name: "Arrive", category: .transit, dayNumber: 0, latitude: 41.88, longitude: -87.63),
                 ItineraryItem(name: "Explore", category: .activity, dayNumber: 2)
             ]
         )
@@ -61,11 +61,39 @@ struct TripPlannerFoundationTests {
 
         #expect(trip.completedItemCount == 5)
         #expect(trip.travelerCount == 1)
-        #expect(trip.progressFraction == 1)
+        #expect(trip.progressDisplayString == "1 of 2 planned")
+        #expect(trip.progressFraction == 0.5)
         #expect(summary.travelerSummary == "1 traveler")
-        #expect(summary.progressSummary == "5 of 5 planned")
+        #expect(summary.progressSummary == "1 of 2 planned")
+        #expect(summary.plannedItemCount == 2)
+        #expect(summary.completedItemCount == 1)
         #expect(trip.itineraryItems.map(\.name) == ["Arrive", "Explore"])
         #expect(trip.itineraryItems[0].dayNumber == 1)
+    }
+
+    @MainActor
+    @Test("Exact itinerary items drive plan progress", .bug("https://github.com/heathdj/TripPlanner/issues/49"))
+    func exactItineraryItemsDrivePlanProgress() {
+        let trip = Trip(
+            title: "Progress",
+            location: "Rome",
+            windowStartDate: date(year: 2026, month: 6, day: 1),
+            windowEndDate: date(year: 2026, month: 6, day: 8),
+            durationDays: 4,
+            itineraryItems: [
+                ItineraryItem(name: "Hotel", category: .stay, dayNumber: 1, latitude: 41.9028, longitude: 12.4964),
+                ItineraryItem(name: "Museum", category: .activity, dayNumber: 2, latitude: 41.8902, longitude: 12.4922),
+                ItineraryItem(name: "Dinner", category: .food, dayNumber: 2, latitude: 41.9009, longitude: 12.4833),
+                ItineraryItem(name: "Walking idea", category: .activity, dayNumber: 3)
+            ]
+        )
+
+        trip.updateProgressFromItinerary()
+
+        #expect(trip.plannedItemCount == 4)
+        #expect(trip.completedItemCount == 3)
+        #expect(trip.progressDisplayString == "3 of 4 planned")
+        #expect(trip.progressFraction == 0.75)
     }
 
     @MainActor

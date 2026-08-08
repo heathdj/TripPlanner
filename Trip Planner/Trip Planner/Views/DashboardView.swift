@@ -55,7 +55,7 @@ struct DashboardView: View {
 
     private var plannedItemTotal: Int {
         trips.reduce(0) { total, trip in
-            total + trip.plannedItemCount
+            total + trip.totalItineraryItemCount
         }
     }
 
@@ -188,7 +188,7 @@ struct DashboardView: View {
         TripLifecycleService.normalizeMigratedLifecycle(for: savedTrip)
         savedTrip.updatedAt = .now
         savedTrip.itineraryItems = TripStore.sortedItineraryItems(savedTrip.itineraryItems)
-        savedTrip.updateProgress(completedItems: 0, plannedItems: savedTrip.itineraryItems.count)
+        savedTrip.updateProgressFromItinerary()
 
         if fetchedTrips.isEmpty {
             modelContext.insert(savedTrip)

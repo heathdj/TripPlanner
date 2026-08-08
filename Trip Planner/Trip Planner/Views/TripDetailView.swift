@@ -255,7 +255,7 @@ struct TripDetailView: View {
             }
 
             trip.itineraryItems[itemIndex] = refreshedItem
-            trip.updatedAt = .now
+            trip.updateProgressFromItinerary()
             try? modelContext.save()
         }
     }
@@ -269,7 +269,7 @@ struct TripDetailView: View {
 
         trip.itineraryItems[itemIndex] = item.itineraryItem
         trip.itineraryItems = TripStore.sortedItineraryItems(trip.itineraryItems)
-        trip.updateProgress(completedItems: min(trip.completedItemCount, trip.itineraryItems.count), plannedItems: trip.itineraryItems.count)
+        trip.updateProgressFromItinerary()
         try modelContext.save()
     }
 

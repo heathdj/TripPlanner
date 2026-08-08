@@ -183,6 +183,8 @@ Migration stayed boring on purpose. New SwiftData fields are optional so existin
 
 Follow-up bug: saved itinerary cards had plenty of useful action buttons, but the card itself was a locked display case. Tapping an existing item now opens the same style of editable form used during plan review, then writes the edited item back into the trip by stable UUID. The lesson is simple: once users can save generated details, the saved version needs the same editing door.
 
+Second follow-up bug: "plan progress" was too vague because it counted a stored number instead of what the traveler could actually see. Progress now treats itinerary items with exact map coordinates as planned, and unresolved search-style items as not yet planned. Four stops with three exact places reads as `3 of 4 planned`, which makes the progress bar a map-detail meter instead of a mystery gauge.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

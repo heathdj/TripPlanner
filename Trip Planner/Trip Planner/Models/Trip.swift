@@ -114,12 +114,24 @@ final class Trip {
     }
 
     var progressDisplayString: String {
-        "\(completedItemCount) of \(plannedItemCount) planned"
+        "\(effectivePlannedItemCount) of \(totalItineraryItemCount) planned"
     }
 
     var progressFraction: Double {
-        guard plannedItemCount > 0 else { return 0 }
-        return Double(completedItemCount) / Double(plannedItemCount)
+        guard totalItineraryItemCount > 0 else { return 0 }
+        return Double(effectivePlannedItemCount) / Double(totalItineraryItemCount)
+    }
+
+    var totalItineraryItemCount: Int {
+        itineraryItems.isEmpty ? plannedItemCount : itineraryItems.count
+    }
+
+    var effectivePlannedItemCount: Int {
+        guard itineraryItems.isEmpty == false else {
+            return completedItemCount
+        }
+
+        return itineraryItems.filter(\.hasCoordinate).count
     }
 
     func updateWindow(start: Date, end: Date, calendar: Calendar = .current) {
@@ -149,6 +161,13 @@ final class Trip {
         updatedAt = .now
     }
 
+    func updateProgressFromItinerary() {
+        updateProgress(
+            completedItems: itineraryItems.filter(\.hasCoordinate).count,
+            plannedItems: itineraryItems.count
+        )
+    }
+
     func updateLocation(latitude: Double?, longitude: Double?) {
         self.latitude = latitude
         self.longitude = longitude
@@ -165,8 +184,8 @@ final class Trip {
             startDateSummary: exactStartDate == nil ? startDateDisplayString : exactDateDisplayString,
             status: status,
             highlight: highlight,
-            plannedItemCount: plannedItemCount,
-            completedItemCount: completedItemCount,
+            plannedItemCount: totalItineraryItemCount,
+            completedItemCount: effectivePlannedItemCount,
             travelerSummary: travelerDisplayString,
             progressSummary: progressDisplayString,
             progressFraction: progressFraction
