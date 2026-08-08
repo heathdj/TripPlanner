@@ -13,6 +13,8 @@ struct NearbyTrip: Identifiable {
 struct TripGroups {
     let nearbyTrips: [NearbyTrip]
     let openTrips: [Trip]
+    let plannedTrips: [Trip]
+    let activeTrips: [Trip]
     let closedTrips: [Trip]
 }
 
@@ -29,6 +31,32 @@ enum TripStore {
             }
     }
 
+    static func sortedPlannedTrips(_ trips: [Trip]) -> [Trip] {
+        trips
+            .filter { $0.status == .planned }
+            .sorted {
+                let lhsDate = $0.exactStartDate ?? $0.windowStartDate
+                let rhsDate = $1.exactStartDate ?? $1.windowStartDate
+                if lhsDate == rhsDate {
+                    return $0.title.localizedStandardCompare($1.title) == .orderedAscending
+                }
+                return lhsDate < rhsDate
+            }
+    }
+
+    static func sortedActiveTrips(_ trips: [Trip]) -> [Trip] {
+        trips
+            .filter { $0.status == .active }
+            .sorted {
+                let lhsDate = $0.activatedAt ?? $0.exactStartDate ?? $0.windowStartDate
+                let rhsDate = $1.activatedAt ?? $1.exactStartDate ?? $1.windowStartDate
+                if lhsDate == rhsDate {
+                    return $0.title.localizedStandardCompare($1.title) == .orderedAscending
+                }
+                return lhsDate < rhsDate
+            }
+    }
+
     static func sortedClosedTrips(_ trips: [Trip]) -> [Trip] {
         trips
             .filter { $0.status == .closed }
@@ -41,7 +69,7 @@ enum TripStore {
     }
 
     static func sortedTrips(_ trips: [Trip]) -> [Trip] {
-        sortedOpenTrips(trips) + sortedClosedTrips(trips)
+        sortedActiveTrips(trips) + sortedPlannedTrips(trips) + sortedOpenTrips(trips) + sortedClosedTrips(trips)
     }
 
     static func sortedItineraryItems(_ items: [ItineraryItem]) -> [ItineraryItem] {
@@ -60,18 +88,23 @@ enum TripStore {
         nearYouDistanceKilometers: Double
     ) -> TripGroups {
         let openTrips = sortedOpenTrips(trips)
+        let plannedTrips = sortedPlannedTrips(trips)
+        let activeTrips = sortedActiveTrips(trips)
         let closedTrips = sortedClosedTrips(trips)
+        let currentTrips = activeTrips + plannedTrips + openTrips
 
         guard let userLocation else {
             return TripGroups(
                 nearbyTrips: [],
                 openTrips: openTrips,
+                plannedTrips: plannedTrips,
+                activeTrips: activeTrips,
                 closedTrips: closedTrips
             )
         }
 
         let radiusMeters = max(1, nearYouDistanceKilometers) * 1_000
-        let nearbyTrips = openTrips
+        let nearbyTrips = currentTrips
             .compactMap { trip -> NearbyTrip? in
                 guard let distanceMeters = distanceMeters(from: userLocation, to: trip),
                       distanceMeters <= radiusMeters
@@ -93,6 +126,8 @@ enum TripStore {
         return TripGroups(
             nearbyTrips: nearbyTrips,
             openTrips: openTrips.filter { nearbyIDs.contains($0.id) == false },
+            plannedTrips: plannedTrips.filter { nearbyIDs.contains($0.id) == false },
+            activeTrips: activeTrips.filter { nearbyIDs.contains($0.id) == false },
             closedTrips: closedTrips
         )
     }

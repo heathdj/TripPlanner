@@ -10,6 +10,8 @@ struct NewTripView: View {
     @State private var destination = ""
     @State private var windowStartDate: Date
     @State private var windowEndDate: Date
+    @State private var hasExactStartDate = false
+    @State private var exactStartDate: Date
     @State private var durationDays: Int
     @State private var travelerCount = 1
     @State private var theme = ""
@@ -29,6 +31,7 @@ struct NewTripView: View {
 
         _windowStartDate = State(initialValue: startDate)
         _windowEndDate = State(initialValue: endDate)
+        _exactStartDate = State(initialValue: startDate)
         _durationDays = State(initialValue: max(1, defaultDurationDays))
         _destinationSuggestionService = State(initialValue: DestinationSuggestionService(userLocation: userLocation))
     }
@@ -46,7 +49,26 @@ struct NewTripView: View {
     }
 
     private var canCreateTrip: Bool {
-        trimmedDestination.isEmpty == false
+        trimmedDestination.isEmpty == false && exactStartValidationMessage == nil
+    }
+
+    private var exactStartValidationMessage: String? {
+        guard hasExactStartDate else { return nil }
+
+        let draftTrip = Trip(
+            title: trimmedTitle.isEmpty ? trimmedDestination : trimmedTitle,
+            location: trimmedDestination.isEmpty ? "Destination" : trimmedDestination,
+            windowStartDate: windowStartDate,
+            windowEndDate: windowEndDate,
+            durationDays: durationDays
+        )
+
+        do {
+            _ = try TripLifecycleService.previewExactEndDate(for: draftTrip, exactStartDate: exactStartDate)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
     }
 
     var body: some View {
@@ -101,6 +123,18 @@ struct NewTripView: View {
                     Stepper(value: $durationDays, in: 1...60, step: 1) {
                         LabeledContent("Trip duration", value: durationDays == 1 ? "1 day" : "\(durationDays) days")
                     }
+
+                    Toggle("Set exact start date", isOn: $hasExactStartDate)
+
+                    if hasExactStartDate {
+                        DatePicker("Exact start", selection: $exactStartDate, in: windowStartDate...windowEndDate, displayedComponents: .date)
+
+                        if let exactStartValidationMessage {
+                            Label(exactStartValidationMessage, systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                    }
                 }
 
                 Section("Who") {
@@ -124,6 +158,15 @@ struct NewTripView: View {
             .onChange(of: windowStartDate) {
                 if windowEndDate < windowStartDate {
                     windowEndDate = windowStartDate
+                }
+
+                if exactStartDate < windowStartDate {
+                    exactStartDate = windowStartDate
+                }
+            }
+            .onChange(of: windowEndDate) {
+                if exactStartDate > windowEndDate {
+                    exactStartDate = windowEndDate
                 }
             }
             .toolbar {
@@ -156,6 +199,10 @@ struct NewTripView: View {
             highlight: trimmedTheme.isEmpty ? "Ready for an on-device generated draft." : trimmedTheme,
             travelerCount: travelerCount
         )
+
+        if hasExactStartDate {
+            _ = try? TripLifecycleService.setExactStartDate(exactStartDate, for: trip)
+        }
 
         saveTrip(trip)
         dismiss()

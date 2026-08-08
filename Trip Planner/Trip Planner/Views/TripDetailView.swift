@@ -16,6 +16,7 @@ struct TripDetailView: View {
     @State private var isGeneratingDraft = false
     @State private var didStartInitialGeneration = false
     @State private var hasSavedReviewedPlan = false
+    @State private var editingItineraryItem: EditableItineraryItem?
 
     let trip: Trip
     var distanceSummary: String?
@@ -57,6 +58,7 @@ struct TripDetailView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         DetailHero(trip: trip, distanceSummary: distanceSummary)
                         TripFactsGrid(trip: trip, distanceSummary: distanceSummary)
+                        LifecycleSection(trip: trip, saveTripChanges: saveTripChanges)
                         SavedPlanSection(plan: savedPlan)
                         GeneratedPlanSection(
                             status: tripPlanGenerator.status,
@@ -70,7 +72,8 @@ struct TripDetailView: View {
                         ItinerarySection(
                             trip: trip,
                             items: trip.itineraryItems,
-                            refreshItem: refreshPlaceDetails
+                            refreshItem: refreshPlaceDetails,
+                            editItem: editItineraryItem
                         )
                     }
                     .padding()
@@ -121,6 +124,15 @@ struct TripDetailView: View {
                     userLocation: userLocation,
                     nearYouDistanceKilometers: nearYouDistanceKilometers,
                     savePlan: saveReviewedPlan
+                )
+            }
+            .sheet(item: $editingItineraryItem) { item in
+                ItineraryItemEditSheet(
+                    trip: trip,
+                    item: item,
+                    userLocation: userLocation,
+                    nearYouDistanceKilometers: nearYouDistanceKilometers,
+                    saveItem: saveEditedItineraryItem
                 )
             }
         }
@@ -179,7 +191,7 @@ struct TripDetailView: View {
             for: trip,
             in: modelContext
         )
-        trip.status = .open
+        TripLifecycleService.normalizeMigratedLifecycle(for: trip)
         trip.updatedAt = .now
         generatedDraft = nil
         hasSavedReviewedPlan = true
@@ -188,7 +200,7 @@ struct TripDetailView: View {
     private func saveGeneratedTrip() {
         guard canSaveGeneratedTrip else { return }
 
-        trip.status = .open
+        TripLifecycleService.normalizeMigratedLifecycle(for: trip)
         trip.updatedAt = .now
 
         do {
@@ -198,6 +210,10 @@ struct TripDetailView: View {
         } catch {
             generationMessage = "Trip Planner could not save this trip. Try saving again."
         }
+    }
+
+    private func saveTripChanges() throws {
+        try modelContext.save()
     }
 
     private func cancelGeneratedTrip() {
@@ -239,9 +255,22 @@ struct TripDetailView: View {
             }
 
             trip.itineraryItems[itemIndex] = refreshedItem
-            trip.updatedAt = .now
+            trip.updateProgressFromItinerary()
             try? modelContext.save()
         }
+    }
+
+    private func editItineraryItem(_ item: ItineraryItem) {
+        editingItineraryItem = EditableItineraryItem(item: item)
+    }
+
+    private func saveEditedItineraryItem(_ item: EditableItineraryItem) throws {
+        guard let itemIndex = trip.itineraryItems.firstIndex(where: { $0.id == item.id }) else { return }
+
+        trip.itineraryItems[itemIndex] = item.itineraryItem
+        trip.itineraryItems = TripStore.sortedItineraryItems(trip.itineraryItems)
+        trip.updateProgressFromItinerary()
+        try modelContext.save()
     }
 
     private func enrichedPlan(from draft: TripPlanDraft) async -> EditableTripPlan {
@@ -348,6 +377,7 @@ private struct TripFactsGrid: View {
     private var facts: [TripFact] {
         var values = [
             TripFact(title: "Travel window", value: trip.windowDisplayString, systemImage: "calendar"),
+            TripFact(title: "Exact dates", value: trip.exactDateDisplayString, systemImage: "calendar.badge.checkmark"),
             TripFact(title: "Trip duration", value: trip.durationDisplayString, systemImage: "clock"),
             TripFact(title: "Travelers", value: trip.travelerDisplayString, systemImage: "person.2.fill"),
             TripFact(title: "Starts", value: trip.startDateDisplayString, systemImage: "arrow.triangle.branch")
@@ -404,6 +434,239 @@ private struct TripFact: Identifiable {
 
     var id: String {
         title
+    }
+}
+
+private struct LifecycleSection: View {
+    let trip: Trip
+    let saveTripChanges: () throws -> Void
+
+    @State private var exactStartDate: Date
+    @State private var errorMessage: String?
+    @State private var pendingAction: LifecycleConfirmation?
+
+    init(trip: Trip, saveTripChanges: @escaping () throws -> Void) {
+        self.trip = trip
+        self.saveTripChanges = saveTripChanges
+        _exactStartDate = State(initialValue: trip.exactStartDate ?? trip.windowStartDate)
+    }
+
+    private var canEditSchedule: Bool {
+        trip.status == .open || trip.status == .planned
+    }
+
+    private var scheduleValidationMessage: String? {
+        guard canEditSchedule else { return nil }
+
+        do {
+            _ = try TripLifecycleService.previewExactEndDate(for: trip, exactStartDate: exactStartDate)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    private var isShowingError: Binding<Bool> {
+        Binding {
+            errorMessage != nil
+        } set: { isPresented in
+            if isPresented == false {
+                errorMessage = nil
+            }
+        }
+    }
+
+    var body: some View {
+        GlassPanel {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Trip Lifecycle")
+                    .font(.headline)
+                    .fontDesign(.rounded)
+
+                Label(statusSummary, systemImage: trip.status.systemImage)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if canEditSchedule {
+                    DatePicker("Exact start", selection: $exactStartDate, in: trip.windowStartDate...trip.windowEndDate, displayedComponents: .date)
+
+                    if let scheduleValidationMessage {
+                        Label(scheduleValidationMessage, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+
+                    HStack {
+                        Button(trip.status == .planned ? "Update Start" : "Plan Trip", systemImage: "calendar.badge.checkmark") {
+                            setExactStartDate()
+                        }
+                        .buttonStyle(.glassProminent)
+                        .disabled(scheduleValidationMessage != nil)
+
+                        if trip.status == .planned {
+                            Button("Clear Date", systemImage: "calendar.badge.minus") {
+                                clearExactStartDate()
+                            }
+                            .buttonStyle(.glass)
+                        }
+                    }
+                }
+
+                if trip.status != .closed {
+                    HStack {
+                        if trip.status == .open || trip.status == .planned {
+                            Button("Start", systemImage: "play.fill") {
+                                pendingAction = .activate
+                            }
+                            .buttonStyle(.glass)
+                        }
+
+                        Button("Complete", systemImage: "checkmark.circle.fill") {
+                            pendingAction = .complete
+                        }
+                        .buttonStyle(.glass)
+
+                        Button("Cancel", systemImage: "xmark.circle.fill", role: .destructive) {
+                            pendingAction = .cancel
+                        }
+                        .buttonStyle(.glass)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .onChange(of: trip.exactStartDate) {
+            exactStartDate = trip.exactStartDate ?? trip.windowStartDate
+        }
+        .confirmationDialog(
+            pendingAction?.title ?? "Update Trip",
+            isPresented: Binding {
+                pendingAction != nil
+            } set: { isPresented in
+                if isPresented == false {
+                    pendingAction = nil
+                }
+            },
+            titleVisibility: .visible
+        ) {
+            if let pendingAction {
+                Button(pendingAction.confirmButtonTitle, role: pendingAction.role) {
+                    perform(pendingAction)
+                }
+            }
+
+            Button("Keep Editing", role: .cancel) { }
+        } message: {
+            Text(pendingAction?.message ?? "")
+        }
+        .alert("Trip Not Updated", isPresented: isShowingError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(errorMessage ?? "Review the trip and try again.")
+        }
+    }
+
+    private var statusSummary: String {
+        switch trip.status {
+        case .open:
+            return "Open trips stay flexible until you choose an exact start date or start the trip."
+        case .planned:
+            return "Planned for \(trip.exactDateDisplayString)."
+        case .active:
+            if let activatedAt = trip.activatedAt {
+                return "Active since \(activatedAt.formatted(date: .abbreviated, time: .shortened))."
+            }
+            return "This trip is active."
+        case .closed:
+            let outcome = trip.effectiveClosedOutcome?.rawValue ?? ClosedTripOutcome.completed.rawValue
+            if let closedAt = trip.closedAt {
+                return "\(outcome) on \(closedAt.formatted(date: .abbreviated, time: .shortened))."
+            }
+            return outcome
+        }
+    }
+
+    private func setExactStartDate() {
+        do {
+            _ = try TripLifecycleService.setExactStartDate(exactStartDate, for: trip)
+            try saveTripChanges()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func clearExactStartDate() {
+        do {
+            try TripLifecycleService.clearExactStartDate(for: trip)
+            try saveTripChanges()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func perform(_ action: LifecycleConfirmation) {
+        do {
+            switch action {
+            case .activate:
+                try TripLifecycleService.activate(trip)
+            case .complete:
+                try TripLifecycleService.close(trip, outcome: .completed)
+            case .cancel:
+                try TripLifecycleService.close(trip, outcome: .cancelled)
+            }
+
+            try saveTripChanges()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private enum LifecycleConfirmation: String, Identifiable {
+    case activate
+    case complete
+    case cancel
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .activate:
+            return "Start Trip?"
+        case .complete:
+            return "Complete Trip?"
+        case .cancel:
+            return "Cancel Trip?"
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .activate:
+            return "This moves the trip into Active Trips. You can have more than one active trip."
+        case .complete:
+            return "This closes the trip and marks the outcome as completed."
+        case .cancel:
+            return "This closes the trip and marks the outcome as cancelled."
+        }
+    }
+
+    var confirmButtonTitle: String {
+        switch self {
+        case .activate:
+            return "Start Trip"
+        case .complete:
+            return "Complete Trip"
+        case .cancel:
+            return "Cancel Trip"
+        }
+    }
+
+    var role: ButtonRole? {
+        self == .cancel ? .destructive : nil
     }
 }
 
@@ -784,6 +1047,95 @@ private struct EditableItineraryItem: Identifiable {
     }
 }
 
+private struct ItineraryItemEditSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let trip: Trip
+    let userLocation: CLLocation?
+    let nearYouDistanceKilometers: Double
+    let saveItem: (EditableItineraryItem) throws -> Void
+
+    @State private var item: EditableItineraryItem
+    @State private var saveErrorMessage: String?
+
+    init(
+        trip: Trip,
+        item: EditableItineraryItem,
+        userLocation: CLLocation?,
+        nearYouDistanceKilometers: Double,
+        saveItem: @escaping (EditableItineraryItem) throws -> Void
+    ) {
+        self.trip = trip
+        self.userLocation = userLocation
+        self.nearYouDistanceKilometers = nearYouDistanceKilometers
+        self.saveItem = saveItem
+        _item = State(initialValue: item)
+    }
+
+    private var canSave: Bool {
+        item.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
+    private var isShowingSaveError: Binding<Bool> {
+        Binding {
+            saveErrorMessage != nil
+        } set: { isPresented in
+            if isPresented == false {
+                saveErrorMessage = nil
+            }
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    EditableItineraryItemSection(
+                        trip: trip,
+                        item: $item,
+                        userLocation: userLocation,
+                        nearYouDistanceKilometers: nearYouDistanceKilometers
+                    )
+                } header: {
+                    Text("Item")
+                } footer: {
+                    Text("Save updates this itinerary item on the trip.")
+                }
+            }
+            .navigationTitle("Edit Item")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        save()
+                    }
+                    .disabled(canSave == false)
+                }
+            }
+            .alert("Item Not Saved", isPresented: isShowingSaveError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(saveErrorMessage ?? "Review the item and try again.")
+            }
+        }
+    }
+
+    private func save() {
+        do {
+            try saveItem(item)
+            dismiss()
+        } catch {
+            saveErrorMessage = "Trip Planner could not save this item. Try saving again."
+        }
+    }
+}
+
 private struct GeneratedPlanReviewSheet: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -946,7 +1298,7 @@ private struct EditableItineraryItemSection: View {
     let nearYouDistanceKilometers: Double
     @Binding var item: EditableItineraryItem
     var confirmItem: (() -> Void)?
-    let deleteItem: () -> Void
+    var deleteItem: (() -> Void)?
 
     @State private var placeQuery = ""
     @State private var placeSearch: ActivityPlaceSearchService
@@ -957,7 +1309,7 @@ private struct EditableItineraryItemSection: View {
         userLocation: CLLocation?,
         nearYouDistanceKilometers: Double,
         confirmItem: (() -> Void)? = nil,
-        deleteItem: @escaping () -> Void
+        deleteItem: (() -> Void)? = nil
     ) {
         self.trip = trip
         self.userLocation = userLocation
@@ -1008,12 +1360,14 @@ private struct EditableItineraryItemSection: View {
                     .accessibilityHint("Adds this item to the reviewed plan")
                 }
 
-                Button("Delete", systemImage: "trash", role: .destructive) {
-                    deleteItem()
+                if let deleteItem {
+                    Button("Delete", systemImage: "trash", role: .destructive) {
+                        deleteItem()
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Delete \(item.name.isEmpty ? "item" : item.name)")
                 }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Delete \(item.name.isEmpty ? "item" : item.name)")
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -1090,9 +1444,6 @@ private struct EditableItineraryItemSection: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.phonePad)
-
-            TextField("Business category", text: detailBinding(\.placeCategory))
-                .textInputAutocapitalization(.words)
 
             TextField("Hours", text: detailBinding(\.placeHours), axis: .vertical)
                 .lineLimit(2...4)
@@ -1203,6 +1554,7 @@ private struct ItinerarySection: View {
     let trip: Trip
     let items: [ItineraryItem]
     let refreshItem: (ItineraryItem) -> Void
+    let editItem: (ItineraryItem) -> Void
 
     var body: some View {
         GlassPanel {
@@ -1220,7 +1572,8 @@ private struct ItinerarySection: View {
                             ItineraryItemRow(
                                 trip: trip,
                                 item: item,
-                                refreshItem: refreshItem
+                                refreshItem: refreshItem,
+                                editItem: editItem
                             )
                         }
                     }
@@ -1234,6 +1587,7 @@ private struct ItineraryItemRow: View {
     let trip: Trip
     let item: ItineraryItem
     let refreshItem: (ItineraryItem) -> Void
+    let editItem: (ItineraryItem) -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -1286,32 +1640,40 @@ private struct ItineraryItemRow: View {
                     PlaceDetailsGrid(item: item)
                 }
 
-                HStack(spacing: 8) {
-                    Button("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill") {
+                LazyVGrid(columns: actionColumns, alignment: .leading, spacing: 8) {
+                    Button {
                         AppleMapsDirectionsService.openDirections(for: item, in: trip)
+                    } label: {
+                        actionLabel("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
                     }
                     .buttonStyle(.glass)
                     .accessibilityLabel(item.directionsAccessibilityLabel)
                     .accessibilityHint("Opens driving directions in Apple Maps")
 
                     if let websiteURL = validatedWebsiteURL {
-                        Button("Website", systemImage: "safari.fill") {
+                        Button {
                             UIApplication.shared.open(websiteURL)
+                        } label: {
+                            actionLabel("Website", systemImage: "safari.fill")
                         }
                         .buttonStyle(.glass)
                         .accessibilityLabel("Open website for \(item.name)")
                     }
 
                     if let phoneURL = validatedPhoneURL {
-                        Button("Call", systemImage: "phone.fill") {
+                        Button {
                             UIApplication.shared.open(phoneURL)
+                        } label: {
+                            actionLabel("Call", systemImage: "phone.fill")
                         }
                         .buttonStyle(.glass)
                         .accessibilityLabel("Call \(item.name)")
                     }
 
-                    Button("Refresh", systemImage: "arrow.clockwise") {
+                    Button {
                         refreshItem(item)
+                    } label: {
+                        actionLabel("Refresh", systemImage: "arrow.clockwise")
                     }
                     .buttonStyle(.glass)
                     .accessibilityLabel("Refresh place details for \(item.name)")
@@ -1319,8 +1681,26 @@ private struct ItineraryItemRow: View {
             }
         }
         .padding(12)
+        .contentShape(.rect)
+        .onTapGesture {
+            editItem(item)
+        }
         .glassEffect(.regular.tint(.teal.opacity(0.08)), in: .rect(cornerRadius: 16))
         .accessibilityElement(children: .contain)
+        .accessibilityHint("Opens an editable itinerary item view")
+    }
+
+    private var actionColumns: [GridItem] {
+        [
+            GridItem(.adaptive(minimum: 132), spacing: 8)
+        ]
+    }
+
+    private func actionLabel(_ title: String, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
+            .frame(maxWidth: .infinity)
     }
 
     private var validatedWebsiteURL: URL? {
@@ -1360,7 +1740,6 @@ private struct PlaceDetailsGrid: View {
             ("Address", item.displayAddress, item.placeAddress?.source),
             ("Phone", item.displayPhoneNumber, item.placePhoneNumber?.source),
             ("Website", item.displayWebsite, item.placeWebsite?.source),
-            ("Category", item.displayPlaceCategory, item.placeCategory?.source),
             ("Hours", item.displayHoursWithTimeZone, item.placeHours?.source),
             ("Cost", item.displayCost, item.placeCost?.source),
             ("Attribution", item.placeAttribution?.value ?? "", item.placeAttribution?.source)

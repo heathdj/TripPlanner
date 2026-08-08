@@ -102,7 +102,7 @@ enum ReviewedTripPlanStore {
         )
 
         trip.itineraryItems = reviewedItems
-        trip.updateProgress(completedItems: 0, plannedItems: reviewedItems.count)
+        trip.updateProgressFromItinerary()
         context.insert(reviewedPlan)
         try context.save()
 
