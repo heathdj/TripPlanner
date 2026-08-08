@@ -408,6 +408,45 @@ struct TripPlannerFoundationTests {
     }
 
     @MainActor
+    @Test("Travel settings store reuses the persisted settings row")
+    func travelSettingsStoreReusesPersistedSettingsRow() throws {
+        let storeURL = temporaryStoreURL()
+        try removeStore(at: storeURL)
+        defer { try? removeStore(at: storeURL) }
+
+        let firstContainer = try makeContainer(at: storeURL)
+        let firstContext = ModelContext(firstContainer)
+        let settings = try TravelSettingsStore.settings(in: firstContext)
+        settings.updateDefaultDuration(days: 9)
+        settings.updateDefaultWindowLength(days: 21)
+        settings.toggleInterest("Museums")
+        try firstContext.save()
+
+        let sameSettings = try TravelSettingsStore.settings(in: firstContext)
+
+        #expect(sameSettings.id == settings.id)
+
+        let secondContainer = try makeContainer(at: storeURL)
+        let secondContext = ModelContext(secondContainer)
+        let persistedSettings = try secondContext.fetch(FetchDescriptor<TravelSettings>())
+        let persistedSetting = try #require(persistedSettings.first)
+
+        #expect(persistedSettings.count == 1)
+        #expect(persistedSetting.defaultDurationDays == 9)
+        #expect(persistedSetting.defaultWindowLengthDays == 21)
+        #expect(persistedSetting.visibleSelectedInterests == ["Museums"])
+    }
+
+    @Test("Destination suggestions combine title and subtitle cleanly")
+    func destinationSuggestionsCombineTitleAndSubtitleCleanly() {
+        let city = DestinationSuggestion(title: "Sydney", subtitle: "New South Wales, Australia")
+        let country = DestinationSuggestion(title: "Japan", subtitle: "")
+
+        #expect(city.displayText == "Sydney, New South Wales, Australia")
+        #expect(country.displayText == "Japan")
+    }
+
+    @MainActor
     @Test("Sample trips include dashboard detail content", .bug("https://github.com/heathdj/TripPlanner/issues/4"))
     func sampleTripsIncludeDashboardDetailContent() {
         let trips = TripStore.sampleTrips

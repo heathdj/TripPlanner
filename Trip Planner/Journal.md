@@ -129,6 +129,8 @@ Small war story: Apple's docs show `GenerationID` inside a nested generated item
 
 Follow-up bug: the generated draft feature depended on an existing trip, but the dashboard `+` button was still an empty action. That meant the front door to the feature looked real but opened into a wall. The fix was to add a small New Trip sheet, save the seed trip first, then open Trip Details and start the on-device draft flow there. The generated itinerary still stays unsaved until a later review/save feature exists.
 
+Second follow-up: Settings needed a sturdier memory. SwiftData persisted the settings row, but array-style interest updates are easy to make in a way that looks changed on screen while not giving the persistence layer a clean reassignment to save. We moved interest edits to explicit array replacement, added a tiny `TravelSettingsStore` for the one-settings-row rule, and made Dashboard load that row before New Trip uses defaults. Destination entry also learned to ask MapKit for location completions, so travelers can pick real cities, regions, and countries instead of typing everything from scratch.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

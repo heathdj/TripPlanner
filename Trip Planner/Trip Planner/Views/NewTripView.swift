@@ -1,3 +1,4 @@
+import CoreLocation
 import SwiftUI
 
 struct NewTripView: View {
@@ -13,9 +14,11 @@ struct NewTripView: View {
     @State private var durationDays: Int
     @State private var travelerCount = 1
     @State private var theme = ""
+    @State private var destinationSuggestionService: DestinationSuggestionService
 
     init(
         settings: TravelSettings?,
+        userLocation: CLLocation?,
         saveTrip: @escaping (Trip) -> Void
     ) {
         self.settings = settings
@@ -30,6 +33,7 @@ struct NewTripView: View {
         _windowStartDate = State(initialValue: startDate)
         _windowEndDate = State(initialValue: endDate)
         _durationDays = State(initialValue: defaultDurationDays)
+        _destinationSuggestionService = State(initialValue: DestinationSuggestionService(userLocation: userLocation))
     }
 
     private var trimmedDestination: String {
@@ -55,6 +59,39 @@ struct NewTripView: View {
                     TextField("Destination", text: $destination)
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled()
+                        .onChange(of: destination) {
+                            destinationSuggestionService.updateQuery(destination)
+                        }
+
+                    if destinationSuggestionService.suggestions.isEmpty == false {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Suggestions")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+
+                            ForEach(destinationSuggestionService.suggestions) { suggestion in
+                                Button {
+                                    selectSuggestion(suggestion)
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(suggestion.title)
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(.primary)
+
+                                        if suggestion.subtitle.isEmpty == false {
+                                            Text(suggestion.subtitle)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(suggestion.displayText)
+                                .accessibilityHint("Uses this location as the destination")
+                            }
+                        }
+                    }
 
                     TextField("Trip name", text: $title)
                         .textInputAutocapitalization(.words)
@@ -125,5 +162,15 @@ struct NewTripView: View {
 
         saveTrip(trip)
         dismiss()
+    }
+
+    private func selectSuggestion(_ suggestion: DestinationSuggestion) {
+        destination = suggestion.displayText
+
+        if trimmedTitle.isEmpty {
+            title = suggestion.title
+        }
+
+        destinationSuggestionService.clearSuggestions()
     }
 }

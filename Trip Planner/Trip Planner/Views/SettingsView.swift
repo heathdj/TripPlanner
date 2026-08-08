@@ -11,7 +11,7 @@ struct SettingsView: View {
 
     @State private var selectedIconName: String?
     @State private var iconErrorMessage: String?
-    @State private var createdSettings: TravelSettings?
+    @State private var settingsErrorMessage: String?
 
     @MainActor
     init(
@@ -23,7 +23,7 @@ struct SettingsView: View {
     }
 
     private var travelSettings: TravelSettings? {
-        settings.first ?? createdSettings
+        settings.first
     }
 
     private var isShowingIconError: Binding<Bool> {
@@ -79,23 +79,37 @@ struct SettingsView: View {
         } message: {
             Text(iconErrorMessage ?? "Choose another icon and try again.")
         }
+        .alert("Settings Not Saved", isPresented: isShowingSettingsError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(settingsErrorMessage ?? "Try changing the setting again.")
+        }
     }
 
     private func saveSettings() {
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            settingsErrorMessage = "Trip Planner could not save settings. Try changing the setting again."
+        }
     }
 
     private func ensureTravelSettings() {
-        guard settings.isEmpty,
-              createdSettings == nil
-        else {
-            return
+        do {
+            _ = try TravelSettingsStore.settings(in: modelContext)
+        } catch {
+            settingsErrorMessage = "Trip Planner could not load saved settings."
         }
+    }
 
-        let newSettings = TravelSettings()
-        createdSettings = newSettings
-        modelContext.insert(newSettings)
-        saveSettings()
+    private var isShowingSettingsError: Binding<Bool> {
+        Binding {
+            settingsErrorMessage != nil
+        } set: { isPresented in
+            if isPresented == false {
+                settingsErrorMessage = nil
+            }
+        }
     }
 }
 

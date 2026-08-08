@@ -112,7 +112,7 @@ struct DashboardView: View {
             }
         }
         .sheet(isPresented: $isShowingNewTrip, onDismiss: openPendingCreatedTrip) {
-            NewTripView(settings: settings.first) { trip in
+            NewTripView(settings: settings.first, userLocation: locationService.currentLocation) { trip in
                 createTrip(trip)
             }
         }
@@ -124,6 +124,7 @@ struct DashboardView: View {
             )
         }
         .task {
+            ensureTravelSettings()
             locationService.requestAccessOrRefreshLocation()
         }
     }
@@ -142,6 +143,10 @@ struct DashboardView: View {
         modelContext.insert(trip)
         try? modelContext.save()
         pendingCreatedTrip = trip
+    }
+
+    private func ensureTravelSettings() {
+        _ = try? TravelSettingsStore.settings(in: modelContext)
     }
 
     private func openPendingCreatedTrip() {
