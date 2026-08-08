@@ -44,6 +44,16 @@ enum TripStore {
         sortedOpenTrips(trips) + sortedClosedTrips(trips)
     }
 
+    static func sortedItineraryItems(_ items: [ItineraryItem]) -> [ItineraryItem] {
+        items.sorted { lhs, rhs in
+            if lhs.dayNumber == rhs.dayNumber {
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+            }
+
+            return lhs.dayNumber < rhs.dayNumber
+        }
+    }
+
     static func groupedTrips(
         _ trips: [Trip],
         userLocation: CLLocation?,

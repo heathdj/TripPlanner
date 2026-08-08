@@ -133,6 +133,28 @@ Second follow-up: Settings needed a sturdier memory. SwiftData persisted the set
 
 Third follow-up: the settings row still made the UI too fragile. If SwiftData did not hand Settings a row at exactly the right moment, Trip Defaults and Activity Interests became blank restaurant menus: nice section titles, no food. The fix was to move user preferences to `@AppStorage`, storing simple values directly in `UserDefaults` and JSON-encoding the interest arrays. SwiftData remains the suitcase for real trip records and reviewed plans; AppStorage is the jacket pocket for small personal preferences the UI must always be able to read instantly.
 
+### 2026-08-07: Issue #8 Puts AI Output at the Editing Desk
+
+Issue `#8` added the guardrail that generated plans needed from the start: the model can draft, but the traveler gets the final say. Generation now opens a review sheet where the title, overview, item names, notes, categories, and day assignments can all be changed before anything touches the real trip.
+
+The persistence rule is intentionally strict. Saving a reviewed plan replaces the previous reviewed plan for that trip, sorts named items by day, drops blank items, updates the trip itinerary, and keeps items compatible with Apple Maps. Cancel is just closing the notebook without tearing out any pages: the existing trip stays untouched.
+
+The engineering lesson is that AI workflows need a customs checkpoint. Generated data is useful cargo, but it should be inspected, edited, and stamped by the user before it becomes app state.
+
+Follow-up bug: editable rows inside `Form` need careful button behavior. The first review sheet put a trash button in a row that also had form controls, and taps could be stolen by the row's picker-style interaction. The fix was to make row actions explicit borderless icon buttons, add native swipe-to-delete, and make manual additions pass through a green checkmark before they become real plan items. We also taught generated and saved plans to keep only one departure event, because a trip only needs one "time to go home" moment.
+
+Second follow-up: a newly generated trip needs a clear finish line. The detail sheet now treats the auto-generation path like a provisional workspace: Cancel can discard it before review is saved, and Save only lights up after the reviewed plan has been saved. That makes the lifecycle visible instead of hiding the important decision behind a generic Done button.
+
+Third follow-up: presentation state should travel with the thing being presented. Dashboard originally carried the selected trip and "start generated flow" as separate state values, which let the detail sheet open in normal Done mode when SwiftUI evaluated the sheet at the wrong moment. We wrapped the trip and its presentation mode together so a new generated trip cannot forget that it is provisional.
+
+Fourth follow-up: a button named Save should save, not merely close the curtain. The generated trip detail sheet now performs an explicit final context save and tells Dashboard the provisional trip is confirmed, which makes the new open trip visible after dismissal instead of relying on earlier intermediate saves.
+
+Fifth follow-up: Dashboard needed to confirm the saved trip by identity, not by trusting the sheet's model reference. The save callback now fetches the trip by UUID, updates the persisted instance, and clears the presented sheet state. That gives the `@Query` driving Open Trips the best chance to see the exact saved row.
+
+Sixth follow-up: the cleanest generated-trip lifecycle is "draft in memory, insert on final Save." Creating a trip before review made every later button responsible for preserving a provisional database row. Now the new trip stays in memory until the user presses the top-level Save, which inserts it once with the reviewed itinerary. Cancel cleans up any reviewed-plan draft rows so abandoned generated trips do not leave orphaned data behind.
+
+Seventh follow-up: the simulator finally told the truth with a Core Data migration error. `TravelSettings` had gained mandatory array attributes after earlier builds already created stores without those columns. SwiftData could not invent values during lightweight migration, so the whole container failed to load and no trips could persist. The active settings UI already uses AppStorage, so the fix was to make those legacy SwiftData arrays optional and normalize nil to empty arrays in code.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

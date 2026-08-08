@@ -31,6 +31,10 @@ struct ItineraryItem: Codable, Hashable, Identifiable, Sendable {
         latitude != nil && longitude != nil
     }
 
+    var isDepartureEvent: Bool {
+        category == .transit && name.localizedCaseInsensitiveContains("departure")
+    }
+
     var dayDisplayString: String {
         "Day \(dayNumber)"
     }

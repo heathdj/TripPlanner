@@ -13,9 +13,8 @@ struct DashboardView: View {
     @AppStorage(TravelPreferencesStorage.Key.nearYouDistanceKilometers) private var nearYouDistanceKilometers = TravelSettings.defaultNearYouDistanceKilometers
 
     @State private var locationService = LocationService()
-    @State private var selectedTrip: Trip?
+    @State private var presentedTrip: PresentedTrip?
     @State private var isShowingNewTrip = false
-    @State private var shouldGenerateDraftForSelectedTrip = false
     @State private var pendingCreatedTrip: Trip?
 
     private let columns = [
@@ -120,11 +119,12 @@ struct DashboardView: View {
                 createTrip(trip)
             }
         }
-        .sheet(item: $selectedTrip) { trip in
+        .sheet(item: $presentedTrip) { presentedTrip in
             TripDetailView(
-                trip: trip,
-                distanceSummary: distanceSummary(for: trip),
-                startsGeneratingDraftOnAppear: shouldGenerateDraftForSelectedTrip
+                trip: presentedTrip.trip,
+                distanceSummary: distanceSummary(for: presentedTrip.trip),
+                startsGeneratingDraftOnAppear: presentedTrip.startsGeneratingDraftOnAppear,
+                generatedTripSaved: saveGeneratedTrip
             )
         }
         .task {
@@ -138,28 +138,62 @@ struct DashboardView: View {
     }
 
     private func selectTrip(_ trip: Trip) {
-        shouldGenerateDraftForSelectedTrip = false
-        selectedTrip = trip
+        presentedTrip = PresentedTrip(
+            trip: trip,
+            startsGeneratingDraftOnAppear: false
+        )
     }
 
     private func createTrip(_ trip: Trip) {
-        modelContext.insert(trip)
-        try? modelContext.save()
         pendingCreatedTrip = trip
+    }
+
+    private func saveGeneratedTrip(_ trip: Trip) {
+        let tripID = trip.id
+        let descriptor = FetchDescriptor<Trip>(
+            predicate: #Predicate { savedTrip in
+                savedTrip.id == tripID
+            }
+        )
+
+        let fetchedTrips = (try? modelContext.fetch(descriptor)) ?? []
+        let savedTrip = fetchedTrips.first ?? trip
+        savedTrip.status = .open
+        savedTrip.updatedAt = .now
+        savedTrip.itineraryItems = TripStore.sortedItineraryItems(savedTrip.itineraryItems)
+        savedTrip.updateProgress(completedItems: 0, plannedItems: savedTrip.itineraryItems.count)
+
+        if fetchedTrips.isEmpty {
+            modelContext.insert(savedTrip)
+        }
+
+        try? modelContext.save()
+        presentedTrip = nil
     }
 
     private func openPendingCreatedTrip() {
         guard let trip = pendingCreatedTrip else { return }
 
         pendingCreatedTrip = nil
-        shouldGenerateDraftForSelectedTrip = true
-        selectedTrip = trip
+        presentedTrip = PresentedTrip(
+            trip: trip,
+            startsGeneratingDraftOnAppear: true
+        )
     }
 
     private func distanceSummary(for trip: Trip) -> String? {
         tripGroups.nearbyTrips
             .first { $0.trip.id == trip.id }
             .map { distanceUnit.formattedDistance(meters: $0.distanceMeters) }
+    }
+}
+
+private struct PresentedTrip: Identifiable {
+    let trip: Trip
+    let startsGeneratingDraftOnAppear: Bool
+
+    var id: String {
+        "\(trip.id)-\(startsGeneratingDraftOnAppear)"
     }
 }
 
