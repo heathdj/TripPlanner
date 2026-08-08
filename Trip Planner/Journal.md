@@ -149,6 +149,8 @@ Third follow-up: presentation state should travel with the thing being presented
 
 Fourth follow-up: a button named Save should save, not merely close the curtain. The generated trip detail sheet now performs an explicit final context save and tells Dashboard the provisional trip is confirmed, which makes the new open trip visible after dismissal instead of relying on earlier intermediate saves.
 
+Fifth follow-up: Dashboard needed to confirm the saved trip by identity, not by trusting the sheet's model reference. The save callback now fetches the trip by UUID, updates the persisted instance, and clears the presented sheet state. That gives the `@Query` driving Open Trips the best chance to see the exact saved row.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

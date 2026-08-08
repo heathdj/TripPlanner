@@ -151,9 +151,24 @@ struct DashboardView: View {
     }
 
     private func saveGeneratedTrip(_ trip: Trip) {
-        trip.status = .open
-        trip.updatedAt = .now
+        let tripID = trip.id
+        let descriptor = FetchDescriptor<Trip>(
+            predicate: #Predicate { savedTrip in
+                savedTrip.id == tripID
+            }
+        )
+
+        let fetchedTrips = (try? modelContext.fetch(descriptor)) ?? []
+        let savedTrip = fetchedTrips.first ?? trip
+        savedTrip.status = .open
+        savedTrip.updatedAt = .now
+
+        if fetchedTrips.isEmpty {
+            modelContext.insert(savedTrip)
+        }
+
         try? modelContext.save()
+        presentedTrip = nil
     }
 
     private func openPendingCreatedTrip() {
