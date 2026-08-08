@@ -181,6 +181,8 @@ The trick was keeping flexibility and commitment separate. The flexible window i
 
 Migration stayed boring on purpose. New SwiftData fields are optional so existing stores do not need Core Data to invent mandatory values. Old closed trips normalize to `completed`, and open trips with an exact date normalize to `planned`. It is not glamorous, but after the previous migration scar tissue, boring persistence is the victory lap.
 
+Follow-up bug: saved itinerary cards had plenty of useful action buttons, but the card itself was a locked display case. Tapping an existing item now opens the same style of editable form used during plan review, then writes the edited item back into the trip by stable UUID. The lesson is simple: once users can save generated details, the saved version needs the same editing door.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

@@ -16,6 +16,7 @@ struct TripDetailView: View {
     @State private var isGeneratingDraft = false
     @State private var didStartInitialGeneration = false
     @State private var hasSavedReviewedPlan = false
+    @State private var editingItineraryItem: EditableItineraryItem?
 
     let trip: Trip
     var distanceSummary: String?
@@ -71,7 +72,8 @@ struct TripDetailView: View {
                         ItinerarySection(
                             trip: trip,
                             items: trip.itineraryItems,
-                            refreshItem: refreshPlaceDetails
+                            refreshItem: refreshPlaceDetails,
+                            editItem: editItineraryItem
                         )
                     }
                     .padding()
@@ -122,6 +124,15 @@ struct TripDetailView: View {
                     userLocation: userLocation,
                     nearYouDistanceKilometers: nearYouDistanceKilometers,
                     savePlan: saveReviewedPlan
+                )
+            }
+            .sheet(item: $editingItineraryItem) { item in
+                ItineraryItemEditSheet(
+                    trip: trip,
+                    item: item,
+                    userLocation: userLocation,
+                    nearYouDistanceKilometers: nearYouDistanceKilometers,
+                    saveItem: saveEditedItineraryItem
                 )
             }
         }
@@ -247,6 +258,19 @@ struct TripDetailView: View {
             trip.updatedAt = .now
             try? modelContext.save()
         }
+    }
+
+    private func editItineraryItem(_ item: ItineraryItem) {
+        editingItineraryItem = EditableItineraryItem(item: item)
+    }
+
+    private func saveEditedItineraryItem(_ item: EditableItineraryItem) throws {
+        guard let itemIndex = trip.itineraryItems.firstIndex(where: { $0.id == item.id }) else { return }
+
+        trip.itineraryItems[itemIndex] = item.itineraryItem
+        trip.itineraryItems = TripStore.sortedItineraryItems(trip.itineraryItems)
+        trip.updateProgress(completedItems: min(trip.completedItemCount, trip.itineraryItems.count), plannedItems: trip.itineraryItems.count)
+        try modelContext.save()
     }
 
     private func enrichedPlan(from draft: TripPlanDraft) async -> EditableTripPlan {
@@ -1023,6 +1047,95 @@ private struct EditableItineraryItem: Identifiable {
     }
 }
 
+private struct ItineraryItemEditSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let trip: Trip
+    let userLocation: CLLocation?
+    let nearYouDistanceKilometers: Double
+    let saveItem: (EditableItineraryItem) throws -> Void
+
+    @State private var item: EditableItineraryItem
+    @State private var saveErrorMessage: String?
+
+    init(
+        trip: Trip,
+        item: EditableItineraryItem,
+        userLocation: CLLocation?,
+        nearYouDistanceKilometers: Double,
+        saveItem: @escaping (EditableItineraryItem) throws -> Void
+    ) {
+        self.trip = trip
+        self.userLocation = userLocation
+        self.nearYouDistanceKilometers = nearYouDistanceKilometers
+        self.saveItem = saveItem
+        _item = State(initialValue: item)
+    }
+
+    private var canSave: Bool {
+        item.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
+    private var isShowingSaveError: Binding<Bool> {
+        Binding {
+            saveErrorMessage != nil
+        } set: { isPresented in
+            if isPresented == false {
+                saveErrorMessage = nil
+            }
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    EditableItineraryItemSection(
+                        trip: trip,
+                        item: $item,
+                        userLocation: userLocation,
+                        nearYouDistanceKilometers: nearYouDistanceKilometers
+                    )
+                } header: {
+                    Text("Item")
+                } footer: {
+                    Text("Save updates this itinerary item on the trip.")
+                }
+            }
+            .navigationTitle("Edit Item")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        save()
+                    }
+                    .disabled(canSave == false)
+                }
+            }
+            .alert("Item Not Saved", isPresented: isShowingSaveError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(saveErrorMessage ?? "Review the item and try again.")
+            }
+        }
+    }
+
+    private func save() {
+        do {
+            try saveItem(item)
+            dismiss()
+        } catch {
+            saveErrorMessage = "Trip Planner could not save this item. Try saving again."
+        }
+    }
+}
+
 private struct GeneratedPlanReviewSheet: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -1185,7 +1298,7 @@ private struct EditableItineraryItemSection: View {
     let nearYouDistanceKilometers: Double
     @Binding var item: EditableItineraryItem
     var confirmItem: (() -> Void)?
-    let deleteItem: () -> Void
+    var deleteItem: (() -> Void)?
 
     @State private var placeQuery = ""
     @State private var placeSearch: ActivityPlaceSearchService
@@ -1196,7 +1309,7 @@ private struct EditableItineraryItemSection: View {
         userLocation: CLLocation?,
         nearYouDistanceKilometers: Double,
         confirmItem: (() -> Void)? = nil,
-        deleteItem: @escaping () -> Void
+        deleteItem: (() -> Void)? = nil
     ) {
         self.trip = trip
         self.userLocation = userLocation
@@ -1247,12 +1360,14 @@ private struct EditableItineraryItemSection: View {
                     .accessibilityHint("Adds this item to the reviewed plan")
                 }
 
-                Button("Delete", systemImage: "trash", role: .destructive) {
-                    deleteItem()
+                if let deleteItem {
+                    Button("Delete", systemImage: "trash", role: .destructive) {
+                        deleteItem()
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Delete \(item.name.isEmpty ? "item" : item.name)")
                 }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Delete \(item.name.isEmpty ? "item" : item.name)")
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -1442,6 +1557,7 @@ private struct ItinerarySection: View {
     let trip: Trip
     let items: [ItineraryItem]
     let refreshItem: (ItineraryItem) -> Void
+    let editItem: (ItineraryItem) -> Void
 
     var body: some View {
         GlassPanel {
@@ -1459,7 +1575,8 @@ private struct ItinerarySection: View {
                             ItineraryItemRow(
                                 trip: trip,
                                 item: item,
-                                refreshItem: refreshItem
+                                refreshItem: refreshItem,
+                                editItem: editItem
                             )
                         }
                     }
@@ -1473,6 +1590,7 @@ private struct ItineraryItemRow: View {
     let trip: Trip
     let item: ItineraryItem
     let refreshItem: (ItineraryItem) -> Void
+    let editItem: (ItineraryItem) -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -1558,8 +1676,13 @@ private struct ItineraryItemRow: View {
             }
         }
         .padding(12)
+        .contentShape(.rect)
+        .onTapGesture {
+            editItem(item)
+        }
         .glassEffect(.regular.tint(.teal.opacity(0.08)), in: .rect(cornerRadius: 16))
         .accessibilityElement(children: .contain)
+        .accessibilityHint("Opens an editable itinerary item view")
     }
 
     private var validatedWebsiteURL: URL? {
