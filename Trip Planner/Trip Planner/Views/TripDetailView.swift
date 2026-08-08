@@ -20,6 +20,7 @@ struct TripDetailView: View {
     var startsGeneratingDraftOnAppear = false
     var openDirections: (ItineraryItem, Trip) -> Void = AppleMapsDirectionsService.openDirections
     var tripPlanGenerator: any TripPlanGenerating = FoundationModelsTripPlanGenerator()
+    var generatedTripSaved: (Trip) -> Void = { _ in }
 
     private var savedPlan: ReviewedTripPlan? {
         reviewedPlans
@@ -93,7 +94,7 @@ struct TripDetailView: View {
                 if isGeneratedTripFlow {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") {
-                            dismiss()
+                            saveGeneratedTrip()
                         }
                         .disabled(canSaveGeneratedTrip == false)
                     }
@@ -166,8 +167,25 @@ struct TripDetailView: View {
             for: trip,
             in: modelContext
         )
+        trip.status = .open
+        trip.updatedAt = .now
         generatedDraft = nil
         hasSavedReviewedPlan = true
+    }
+
+    private func saveGeneratedTrip() {
+        guard canSaveGeneratedTrip else { return }
+
+        trip.status = .open
+        trip.updatedAt = .now
+
+        do {
+            try modelContext.save()
+            generatedTripSaved(trip)
+            dismiss()
+        } catch {
+            generationMessage = "Trip Planner could not save this trip. Try saving again."
+        }
     }
 
     private func cancelGeneratedTrip() {

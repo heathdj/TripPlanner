@@ -123,7 +123,8 @@ struct DashboardView: View {
             TripDetailView(
                 trip: presentedTrip.trip,
                 distanceSummary: distanceSummary(for: presentedTrip.trip),
-                startsGeneratingDraftOnAppear: presentedTrip.startsGeneratingDraftOnAppear
+                startsGeneratingDraftOnAppear: presentedTrip.startsGeneratingDraftOnAppear,
+                generatedTripSaved: saveGeneratedTrip
             )
         }
         .task {
@@ -147,6 +148,12 @@ struct DashboardView: View {
         modelContext.insert(trip)
         try? modelContext.save()
         pendingCreatedTrip = trip
+    }
+
+    private func saveGeneratedTrip(_ trip: Trip) {
+        trip.status = .open
+        trip.updatedAt = .now
+        try? modelContext.save()
     }
 
     private func openPendingCreatedTrip() {
