@@ -1445,9 +1445,6 @@ private struct EditableItineraryItemSection: View {
                 .autocorrectionDisabled()
                 .keyboardType(.phonePad)
 
-            TextField("Business category", text: detailBinding(\.placeCategory))
-                .textInputAutocapitalization(.words)
-
             TextField("Hours", text: detailBinding(\.placeHours), axis: .vertical)
                 .lineLimit(2...4)
                 .textInputAutocapitalization(.sentences)
@@ -1743,7 +1740,6 @@ private struct PlaceDetailsGrid: View {
             ("Address", item.displayAddress, item.placeAddress?.source),
             ("Phone", item.displayPhoneNumber, item.placePhoneNumber?.source),
             ("Website", item.displayWebsite, item.placeWebsite?.source),
-            ("Category", item.displayPlaceCategory, item.placeCategory?.source),
             ("Hours", item.displayHoursWithTimeZone, item.placeHours?.source),
             ("Cost", item.displayCost, item.placeCost?.source),
             ("Attribution", item.placeAttribution?.value ?? "", item.placeAttribution?.source)
