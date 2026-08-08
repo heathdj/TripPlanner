@@ -165,6 +165,14 @@ The architecture lesson is to save facts, not framework objects. `MKMapItem` is 
 
 Follow-up bug: MapKit's region can be a polite suggestion instead of a locked door. Activity search originally biased results near the traveler, but it could still offer places on another continent. The fix was to use the same Near You radius from Settings, make MapKit's region priority required, and filter resolved map items by actual distance from the current location when available.
 
+### 2026-08-08: Issue #46 Teaches Activities to Remember Place Facts
+
+Issue `#46` added a place-details notebook to each itinerary item. Apple Maps can provide trustworthy facts like phone numbers, websites, categories, time zones, and attribution; travelers can provide the squishier bits like hours notes and cost guidance when the provider has nothing useful to say.
+
+The key rule is source tags. Provider values and manual values wear different badges, and refreshes are polite: they update provider-sourced data but do not stomp on a user's correction. That turns refresh into a helpful clerk, not a paper shredder.
+
+Follow-up: generated plans now visit the place-details desk before the traveler reviews them. The model still drafts the ideas, but MapKit gets a chance to attach real provider facts first. If a generated stop cannot be resolved, it stays editable instead of blocking the sheet.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

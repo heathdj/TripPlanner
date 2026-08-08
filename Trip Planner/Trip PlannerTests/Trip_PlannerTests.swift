@@ -1,5 +1,6 @@
 import Foundation
 import CoreLocation
+import MapKit
 import SwiftData
 import Testing
 @testable import Trip_Planner
@@ -139,7 +140,12 @@ struct TripPlannerFoundationTests {
             longitude: 151.2153,
             mapItemIdentifier: "apple-map-item-id",
             phoneNumber: "+61 2 9250 7111",
-            pointOfInterestCategoryName: "MKPOICategoryTheater"
+            pointOfInterestCategoryName: "MKPOICategoryTheater",
+            placeWebsite: PlaceDetailValue(value: "https://www.sydneyoperahouse.com", source: .provider),
+            placeHours: PlaceDetailValue(value: "10:00 AM-5:00 PM", source: .user),
+            placeCost: PlaceDetailValue(value: "AUD 45-75", source: .user),
+            placeTimeZoneIdentifier: "Australia/Sydney",
+            placeAttribution: PlaceDetailValue(value: "Apple Maps", source: .provider)
         )
 
         let reviewedItems = ReviewedTripPlanStore.reviewedItems(from: [item])
@@ -147,7 +153,47 @@ struct TripPlannerFoundationTests {
         #expect(reviewedItems.first?.mapItemIdentifier == "apple-map-item-id")
         #expect(reviewedItems.first?.phoneNumber == "+61 2 9250 7111")
         #expect(reviewedItems.first?.pointOfInterestCategoryName == "MKPOICategoryTheater")
+        #expect(reviewedItems.first?.placeWebsite?.value == "https://www.sydneyoperahouse.com")
+        #expect(reviewedItems.first?.placeHours?.source == .user)
+        #expect(reviewedItems.first?.placeCost?.value == "AUD 45-75")
+        #expect(reviewedItems.first?.placeTimeZoneIdentifier == "Australia/Sydney")
+        #expect(reviewedItems.first?.placeAttribution?.source == .provider)
         #expect(reviewedItems.first?.hasCoordinate == true)
+    }
+
+    @MainActor
+    @Test("Provider metadata refresh preserves manual overrides", .bug("https://github.com/heathdj/TripPlanner/issues/46"))
+    func providerMetadataRefreshPreservesManualOverrides() throws {
+        let item = ItineraryItem(
+            name: "Museum",
+            notesOrAddress: "Manual address",
+            category: .activity,
+            dayNumber: 1,
+            placePhoneNumber: PlaceDetailValue(value: "555-0100", source: .user),
+            placeWebsite: PlaceDetailValue(value: "https://old.example.com", source: .provider),
+            placeHours: PlaceDetailValue(value: "Closed Tuesdays", source: .user),
+            placeCost: PlaceDetailValue(value: "Free", source: .user)
+        )
+        let mapItem = MKMapItem(
+            location: CLLocation(latitude: 41.8902, longitude: 12.4922),
+            address: nil
+        )
+        mapItem.name = "Museum"
+        mapItem.phoneNumber = "555-9999"
+        mapItem.url = URL(string: "https://provider.example.com")
+        mapItem.pointOfInterestCategory = .museum
+        mapItem.timeZone = TimeZone(identifier: "Europe/Rome")
+
+        let refreshed = item.applyingProviderMetadata(from: mapItem)
+
+        #expect(refreshed.placePhoneNumber?.value == "555-0100")
+        #expect(refreshed.placePhoneNumber?.source == .user)
+        #expect(refreshed.placeWebsite?.value == "https://provider.example.com")
+        #expect(refreshed.placeWebsite?.source == .provider)
+        #expect(refreshed.placeHours?.value == "Closed Tuesdays")
+        #expect(refreshed.placeCost?.value == "Free")
+        #expect(refreshed.placeTimeZoneIdentifier == "Europe/Rome")
+        #expect(refreshed.placeAttribution?.value == "Apple Maps")
     }
 
     @MainActor
