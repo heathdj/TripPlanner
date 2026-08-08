@@ -119,6 +119,14 @@ Issue `#6` gave travelers a reusable activity palette. Suggested interests cover
 
 The design choice is privacy-first persistence. Interests live in `TravelSettings`, stay local across launches, and are only meant to leave the device when the traveler explicitly asks for plan generation. The model gets better context, but the app does not quietly turn preferences into background chatter.
 
+### 2026-08-07: Issue #7 Brings in the On-Device Travel Brain
+
+Issue `#7` added the app's first Foundation Models workflow. Trip details, flexible window, duration, traveler count, theme, and selected interests now feed an on-device `LanguageModelSession`, which returns a typed `@Generable` draft instead of loose text soup.
+
+The important boundary is the sanitizer. The model can suggest, but the app still checks the passport: generated days are clamped to the trip duration, categories map into the app's supported itinerary types, blank text gets safe fallback copy, and the result stays a draft. Nothing is saved automatically, because AI output should go through customs before entering the real itinerary.
+
+Small war story: Apple's docs show `GenerationID` inside a nested generated item example, but this SDK's macro expansion rejected it because `GenerationID` did not conform to the generated-content protocols. We removed it and let Trip Planner create UUID-backed `ItineraryItem` values after sanitization, which is cleaner for our model anyway.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

@@ -209,6 +209,51 @@ struct TripPlannerFoundationTests {
     }
 
     @MainActor
+    @Test("Trip generation prompt includes private planning inputs", .bug("https://github.com/heathdj/TripPlanner/issues/7"))
+    func tripGenerationPromptIncludesPrivatePlanningInputs() {
+        let input = TripPlanGenerationInput(
+            destination: "Sydney, Australia",
+            travelWindow: "Aug 1-Aug 15, 2026",
+            durationDays: 4,
+            travelerCount: 2,
+            theme: "Harbor views and local food",
+            selectedInterests: ["Museums", "Local Food"]
+        )
+
+        let prompt = FoundationModelsTripPlanGenerator.prompt(for: input)
+
+        #expect(prompt.contains("Destination: Sydney, Australia"))
+        #expect(prompt.contains("Flexible travel window: Aug 1-Aug 15, 2026"))
+        #expect(prompt.contains("Trip duration: 4 days"))
+        #expect(prompt.contains("Traveler count: 2"))
+        #expect(prompt.contains("Trip theme: Harbor views and local food"))
+        #expect(prompt.contains("Selected interests: Museums, Local Food"))
+        #expect(prompt.contains("Do not include reservations, prices, weather, hours, live schedules"))
+    }
+
+    @MainActor
+    @Test("Generated trip drafts clamp days and preserve supported categories", .bug("https://github.com/heathdj/TripPlanner/issues/7"))
+    func generatedTripDraftsClampDaysAndPreserveSupportedCategories() {
+        let draft = TripPlanGenerationSanitizer.draft(
+            title: "  ",
+            overview: "",
+            items: [
+                TripPlanDraftItemInput(name: "Late dinner", notes: "Neighborhood suggestion", category: .food, dayNumber: 9),
+                TripPlanDraftItemInput(name: "Arrival", notes: "Airport to hotel", category: .transit, dayNumber: 0),
+                TripPlanDraftItemInput(name: "Gallery", notes: "Indoor option", category: .activity, dayNumber: 2),
+                TripPlanDraftItemInput(name: "", notes: "", category: .stay, dayNumber: 1)
+            ],
+            durationDays: 3
+        )
+
+        #expect(draft.title == "Generated Trip Draft")
+        #expect(draft.overview == "Review these on-device suggestions before saving anything to your trip.")
+        #expect(draft.items.map(\.dayNumber) == [1, 1, 2, 3])
+        #expect(draft.items.map(\.category) == [.transit, .stay, .activity, .food])
+        #expect(draft.items[1].name == "Trip idea")
+    }
+
+    @MainActor
     @Test("Nearby grouping promotes only open trips inside the radius", .bug("https://github.com/heathdj/TripPlanner/issues/3"))
     func nearbyGroupingPromotesOpenTripsInsideRadius() {
         let userLocation = CLLocation(latitude: 41.8781, longitude: -87.6298)
