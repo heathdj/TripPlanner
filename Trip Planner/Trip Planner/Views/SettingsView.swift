@@ -1,17 +1,19 @@
-import SwiftData
 import SwiftUI
 import UIKit
 
 struct SettingsView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var settings: [TravelSettings]
-
     let appInfo: AppInfo
     private let iconManager: any AppIconManaging
 
+    @AppStorage(TravelPreferencesStorage.Key.defaultDurationDays) private var defaultDurationDays = TravelSettings.defaultDurationDays
+    @AppStorage(TravelPreferencesStorage.Key.defaultWindowLengthDays) private var defaultWindowLengthDays = TravelSettings.defaultWindowLengthDays
+    @AppStorage(TravelPreferencesStorage.Key.distanceUnit) private var distanceUnitRawValue = DistanceUnit.kilometers.rawValue
+    @AppStorage(TravelPreferencesStorage.Key.nearYouDistanceKilometers) private var nearYouDistanceKilometers = TravelSettings.defaultNearYouDistanceKilometers
+    @AppStorage(TravelPreferencesStorage.Key.selectedInterestNames) private var selectedInterestNamesData = TravelPreferencesStorage.defaultSelectedInterestsData
+    @AppStorage(TravelPreferencesStorage.Key.customInterestNames) private var customInterestNamesData = TravelPreferencesStorage.defaultCustomInterestsData
+
     @State private var selectedIconName: String?
     @State private var iconErrorMessage: String?
-    @State private var settingsErrorMessage: String?
 
     @MainActor
     init(
@@ -20,10 +22,6 @@ struct SettingsView: View {
     ) {
         self.appInfo = appInfo
         self.iconManager = iconManager ?? UIApplicationAppIconManager(application: .shared)
-    }
-
-    private var travelSettings: TravelSettings? {
-        settings.first
     }
 
     private var isShowingIconError: Binding<Bool> {
@@ -52,12 +50,14 @@ struct SettingsView: View {
                                 iconManager: iconManager
                             )
                             DefaultsSection(
-                                settings: travelSettings,
-                                save: saveSettings
+                                defaultDurationDays: $defaultDurationDays,
+                                defaultWindowLengthDays: $defaultWindowLengthDays,
+                                distanceUnitRawValue: $distanceUnitRawValue,
+                                nearYouDistanceKilometers: $nearYouDistanceKilometers
                             )
                             ActivityInterestsSection(
-                                settings: travelSettings,
-                                save: saveSettings
+                                selectedInterestNamesData: $selectedInterestNamesData,
+                                customInterestNamesData: $customInterestNamesData
                             )
                             SupportSection(appInfo: appInfo)
                         }
@@ -72,43 +72,11 @@ struct SettingsView: View {
         }
         .task {
             selectedIconName = iconManager.currentIconName
-            ensureTravelSettings()
         }
         .alert("App Icon Not Changed", isPresented: isShowingIconError) {
             Button("OK", role: .cancel) { }
         } message: {
             Text(iconErrorMessage ?? "Choose another icon and try again.")
-        }
-        .alert("Settings Not Saved", isPresented: isShowingSettingsError) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(settingsErrorMessage ?? "Try changing the setting again.")
-        }
-    }
-
-    private func saveSettings() {
-        do {
-            try modelContext.save()
-        } catch {
-            settingsErrorMessage = "Trip Planner could not save settings. Try changing the setting again."
-        }
-    }
-
-    private func ensureTravelSettings() {
-        do {
-            _ = try TravelSettingsStore.settings(in: modelContext)
-        } catch {
-            settingsErrorMessage = "Trip Planner could not load saved settings."
-        }
-    }
-
-    private var isShowingSettingsError: Binding<Bool> {
-        Binding {
-            settingsErrorMessage != nil
-        } set: { isPresented in
-            if isPresented == false {
-                settingsErrorMessage = nil
-            }
         }
     }
 }
@@ -248,8 +216,22 @@ private struct AppIconPreview: View {
 }
 
 private struct DefaultsSection: View {
-    let settings: TravelSettings?
-    let save: () -> Void
+    @Binding var defaultDurationDays: Int
+    @Binding var defaultWindowLengthDays: Int
+    @Binding var distanceUnitRawValue: String
+    @Binding var nearYouDistanceKilometers: Double
+
+    private var distanceUnit: DistanceUnit {
+        DistanceUnit(rawValue: distanceUnitRawValue) ?? .kilometers
+    }
+
+    private var nearYouDistanceValue: Double {
+        distanceUnit.value(fromKilometers: nearYouDistanceKilometers)
+    }
+
+    private var nearYouDistanceDisplayString: String {
+        "\(nearYouDistanceValue.formatted(.number.precision(.fractionLength(0)))) \(distanceUnit.symbol)"
+    }
 
     var body: some View {
         GlassPanel {
@@ -258,85 +240,79 @@ private struct DefaultsSection: View {
                     .font(.headline)
                     .fontDesign(.rounded)
 
-                if let settings {
-                    Stepper(
-                        value: durationBinding(for: settings),
-                        in: 1...60,
-                        step: 1
-                    ) {
-                        LabeledContent(
-                            "Default duration",
-                            value: "\(settings.defaultDurationDays) days"
-                        )
-                    }
+                Stepper(
+                    value: durationBinding,
+                    in: 1...60,
+                    step: 1
+                ) {
+                    LabeledContent(
+                        "Default duration",
+                        value: "\(defaultDurationDays) days"
+                    )
+                }
 
-                    Stepper(
-                        value: windowBinding(for: settings),
-                        in: 1...180,
-                        step: 1
-                    ) {
-                        LabeledContent(
-                            "Default window",
-                            value: "\(settings.defaultWindowLengthDays) days"
-                        )
-                    }
+                Stepper(
+                    value: windowBinding,
+                    in: 1...180,
+                    step: 1
+                ) {
+                    LabeledContent(
+                        "Default window",
+                        value: "\(defaultWindowLengthDays) days"
+                    )
+                }
 
-                    Picker("Distance units", selection: distanceUnitBinding(for: settings)) {
-                        ForEach(DistanceUnit.allCases) { unit in
-                            Text(unit.displayName)
-                                .tag(unit)
-                        }
+                Picker("Distance units", selection: distanceUnitBinding) {
+                    ForEach(DistanceUnit.allCases) { unit in
+                        Text(unit.displayName)
+                            .tag(unit)
                     }
-                    .pickerStyle(.segmented)
+                }
+                .pickerStyle(.segmented)
 
-                    Stepper(
-                        value: nearYouDistanceBinding(for: settings),
-                        in: nearYouDistanceRange(for: settings.distanceUnit),
-                        step: 5
-                    ) {
-                        LabeledContent(
-                            "Near you distance",
-                            value: settings.nearYouDistanceDisplayString
-                        )
-                    }
+                Stepper(
+                    value: nearYouDistanceBinding,
+                    in: nearYouDistanceRange(for: distanceUnit),
+                    step: 5
+                ) {
+                    LabeledContent(
+                        "Near you distance",
+                        value: nearYouDistanceDisplayString
+                    )
                 }
             }
         }
     }
 
-    private func durationBinding(for settings: TravelSettings) -> Binding<Int> {
+    private var durationBinding: Binding<Int> {
         Binding {
-            settings.defaultDurationDays
+            defaultDurationDays
         } set: { newValue in
-            settings.updateDefaultDuration(days: newValue)
-            save()
+            defaultDurationDays = max(1, newValue)
         }
     }
 
-    private func windowBinding(for settings: TravelSettings) -> Binding<Int> {
+    private var windowBinding: Binding<Int> {
         Binding {
-            settings.defaultWindowLengthDays
+            defaultWindowLengthDays
         } set: { newValue in
-            settings.updateDefaultWindowLength(days: newValue)
-            save()
+            defaultWindowLengthDays = max(1, newValue)
         }
     }
 
-    private func distanceUnitBinding(for settings: TravelSettings) -> Binding<DistanceUnit> {
+    private var distanceUnitBinding: Binding<DistanceUnit> {
         Binding {
-            settings.distanceUnit
+            distanceUnit
         } set: { newValue in
-            settings.updateDistanceUnit(newValue)
-            save()
+            distanceUnitRawValue = newValue.rawValue
         }
     }
 
-    private func nearYouDistanceBinding(for settings: TravelSettings) -> Binding<Double> {
+    private var nearYouDistanceBinding: Binding<Double> {
         Binding {
-            settings.nearYouDistanceValue
+            nearYouDistanceValue
         } set: { newValue in
-            settings.updateNearYouDistance(value: newValue, unit: settings.distanceUnit)
-            save()
+            nearYouDistanceKilometers = max(1, distanceUnit.kilometers(from: newValue))
         }
     }
 
@@ -351,14 +327,29 @@ private struct DefaultsSection: View {
 }
 
 private struct ActivityInterestsSection: View {
-    let settings: TravelSettings?
-    let save: () -> Void
+    @Binding var selectedInterestNamesData: String
+    @Binding var customInterestNamesData: String
 
     @State private var customInterestName = ""
 
     private let columns = [
         GridItem(.adaptive(minimum: 130), spacing: 10)
     ]
+
+    private var selectedInterestNames: [String] {
+        TravelPreferencesStorage.decodeInterests(from: selectedInterestNamesData)
+    }
+
+    private var customInterestNames: [String] {
+        TravelPreferencesStorage.decodeInterests(from: customInterestNamesData)
+    }
+
+    private var visibleSelectedInterests: [String] {
+        TravelPreferencesStorage.visibleSelectedInterests(
+            selected: selectedInterestNames,
+            custom: customInterestNames
+        )
+    }
 
     var body: some View {
         GlassPanel {
@@ -372,57 +363,61 @@ private struct ActivityInterestsSection: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if let settings {
-                    selectedInterestsSummary(for: settings)
+                selectedInterestsSummary
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Suggested")
-                            .font(.subheadline.weight(.semibold))
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Suggested")
+                        .font(.subheadline.weight(.semibold))
 
-                        LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
-                            ForEach(ActivityInterestCatalog.builtInInterests, id: \.self) { interest in
-                                InterestToggleButton(
-                                    title: interest,
-                                    isSelected: settings.isInterestSelected(interest)
-                                ) {
-                                    settings.toggleInterest(interest)
-                                    save()
-                                }
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
+                        ForEach(ActivityInterestCatalog.builtInInterests, id: \.self) { interest in
+                            InterestToggleButton(
+                                title: interest,
+                                isSelected: TravelPreferencesStorage.isInterestSelected(
+                                    interest,
+                                    selected: selectedInterestNames
+                                )
+                            ) {
+                                selectedInterestNamesData = TravelPreferencesStorage.encodeInterests(
+                                    TravelPreferencesStorage.toggledInterest(
+                                        interest,
+                                        selected: selectedInterestNames
+                                    )
+                                )
                             }
                         }
                     }
+                }
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Custom")
-                            .font(.subheadline.weight(.semibold))
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Custom")
+                        .font(.subheadline.weight(.semibold))
 
-                        HStack(spacing: 10) {
-                            TextField("Add an interest", text: $customInterestName)
-                                .textInputAutocapitalization(.words)
-                                .autocorrectionDisabled()
-                                .textFieldStyle(.roundedBorder)
-                                .onSubmit {
-                                    addCustomInterest(to: settings)
-                                }
-
-                            Button("Add", systemImage: "plus") {
-                                addCustomInterest(to: settings)
+                    HStack(spacing: 10) {
+                        TextField("Add an interest", text: $customInterestName)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit {
+                                addCustomInterest()
                             }
-                            .buttonStyle(.glassProminent)
-                            .disabled(trimmedCustomInterest.isEmpty)
-                        }
 
-                        if settings.customInterestNames.isEmpty {
-                            Text("Add custom interests like pottery, gardens, or jazz clubs.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
-                                ForEach(settings.customInterestNames, id: \.self) { interest in
-                                    CustomInterestChip(title: interest) {
-                                        settings.removeCustomInterest(interest)
-                                        save()
-                                    }
+                        Button("Add", systemImage: "plus") {
+                            addCustomInterest()
+                        }
+                        .buttonStyle(.glassProminent)
+                        .disabled(trimmedCustomInterest.isEmpty)
+                    }
+
+                    if customInterestNames.isEmpty {
+                        Text("Add custom interests like pottery, gardens, or jazz clubs.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
+                            ForEach(customInterestNames, id: \.self) { interest in
+                                CustomInterestChip(title: interest) {
+                                    removeCustomInterest(interest)
                                 }
                             }
                         }
@@ -436,31 +431,46 @@ private struct ActivityInterestsSection: View {
         customInterestName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func selectedInterestsSummary(for settings: TravelSettings) -> some View {
+    private var selectedInterestsSummary: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Selected for generated plans")
                 .font(.subheadline.weight(.semibold))
 
-            if settings.visibleSelectedInterests.isEmpty {
+            if visibleSelectedInterests.isEmpty {
                 Text("No interests selected yet.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
-                Text(settings.visibleSelectedInterests.joined(separator: ", "))
+                Text(visibleSelectedInterests.joined(separator: ", "))
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityLabel("Selected interests: \(settings.visibleSelectedInterests.joined(separator: ", "))")
+                    .accessibilityLabel("Selected interests: \(visibleSelectedInterests.joined(separator: ", "))")
             }
         }
     }
 
-    private func addCustomInterest(to settings: TravelSettings) {
+    private func addCustomInterest() {
         let interest = trimmedCustomInterest
         guard interest.isEmpty == false else { return }
 
-        settings.addCustomInterest(interest)
+        let updated = TravelPreferencesStorage.addingCustomInterest(
+            interest,
+            selected: selectedInterestNames,
+            custom: customInterestNames
+        )
+        selectedInterestNamesData = TravelPreferencesStorage.encodeInterests(updated.selected)
+        customInterestNamesData = TravelPreferencesStorage.encodeInterests(updated.custom)
         customInterestName = ""
-        save()
+    }
+
+    private func removeCustomInterest(_ interest: String) {
+        let updated = TravelPreferencesStorage.removingCustomInterest(
+            interest,
+            selected: selectedInterestNames,
+            custom: customInterestNames
+        )
+        selectedInterestNamesData = TravelPreferencesStorage.encodeInterests(updated.selected)
+        customInterestNamesData = TravelPreferencesStorage.encodeInterests(updated.custom)
     }
 }
 

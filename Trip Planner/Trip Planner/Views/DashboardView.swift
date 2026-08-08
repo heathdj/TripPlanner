@@ -6,7 +6,11 @@ import UIKit
 struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var trips: [Trip]
-    @Query private var settings: [TravelSettings]
+
+    @AppStorage(TravelPreferencesStorage.Key.defaultDurationDays) private var defaultDurationDays = TravelSettings.defaultDurationDays
+    @AppStorage(TravelPreferencesStorage.Key.defaultWindowLengthDays) private var defaultWindowLengthDays = TravelSettings.defaultWindowLengthDays
+    @AppStorage(TravelPreferencesStorage.Key.distanceUnit) private var distanceUnitRawValue = DistanceUnit.kilometers.rawValue
+    @AppStorage(TravelPreferencesStorage.Key.nearYouDistanceKilometers) private var nearYouDistanceKilometers = TravelSettings.defaultNearYouDistanceKilometers
 
     @State private var locationService = LocationService()
     @State private var selectedTrip: Trip?
@@ -19,18 +23,14 @@ struct DashboardView: View {
     ]
 
     private var distanceUnit: DistanceUnit {
-        settings.first?.distanceUnit ?? .kilometers
-    }
-
-    private var nearYouDistanceKilometers: Double {
-        settings.first?.nearYouDistanceKilometers ?? TravelSettings.defaultNearYouDistanceKilometers
+        DistanceUnit(rawValue: distanceUnitRawValue) ?? .kilometers
     }
 
     private var tripGroups: TripGroups {
         TripStore.groupedTrips(
             trips,
             userLocation: locationService.currentLocation,
-            nearYouDistanceKilometers: nearYouDistanceKilometers
+            nearYouDistanceKilometers: max(1, nearYouDistanceKilometers)
         )
     }
 
@@ -112,7 +112,11 @@ struct DashboardView: View {
             }
         }
         .sheet(isPresented: $isShowingNewTrip, onDismiss: openPendingCreatedTrip) {
-            NewTripView(settings: settings.first, userLocation: locationService.currentLocation) { trip in
+            NewTripView(
+                defaultDurationDays: defaultDurationDays,
+                defaultWindowLengthDays: defaultWindowLengthDays,
+                userLocation: locationService.currentLocation
+            ) { trip in
                 createTrip(trip)
             }
         }
@@ -124,7 +128,6 @@ struct DashboardView: View {
             )
         }
         .task {
-            ensureTravelSettings()
             locationService.requestAccessOrRefreshLocation()
         }
     }
@@ -143,10 +146,6 @@ struct DashboardView: View {
         modelContext.insert(trip)
         try? modelContext.save()
         pendingCreatedTrip = trip
-    }
-
-    private func ensureTravelSettings() {
-        _ = try? TravelSettingsStore.settings(in: modelContext)
     }
 
     private func openPendingCreatedTrip() {

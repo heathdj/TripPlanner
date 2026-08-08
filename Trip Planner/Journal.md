@@ -131,6 +131,8 @@ Follow-up bug: the generated draft feature depended on an existing trip, but the
 
 Second follow-up: Settings needed a sturdier memory. SwiftData persisted the settings row, but array-style interest updates are easy to make in a way that looks changed on screen while not giving the persistence layer a clean reassignment to save. We moved interest edits to explicit array replacement, added a tiny `TravelSettingsStore` for the one-settings-row rule, and made Dashboard load that row before New Trip uses defaults. Destination entry also learned to ask MapKit for location completions, so travelers can pick real cities, regions, and countries instead of typing everything from scratch.
 
+Third follow-up: the settings row still made the UI too fragile. If SwiftData did not hand Settings a row at exactly the right moment, Trip Defaults and Activity Interests became blank restaurant menus: nice section titles, no food. The fix was to move user preferences to `@AppStorage`, storing simple values directly in `UserDefaults` and JSON-encoding the interest arrays. SwiftData remains the suitcase for real trip records and reviewed plans; AppStorage is the jacket pocket for small personal preferences the UI must always be able to read instantly.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

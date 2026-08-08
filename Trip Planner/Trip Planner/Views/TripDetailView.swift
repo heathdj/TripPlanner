@@ -4,7 +4,8 @@ import SwiftUI
 struct TripDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Query private var reviewedPlans: [ReviewedTripPlan]
-    @Query private var travelSettings: [TravelSettings]
+    @AppStorage(TravelPreferencesStorage.Key.selectedInterestNames) private var selectedInterestNamesData = TravelPreferencesStorage.defaultSelectedInterestsData
+    @AppStorage(TravelPreferencesStorage.Key.customInterestNames) private var customInterestNamesData = TravelPreferencesStorage.defaultCustomInterestsData
     @State private var generatedDraft: TripPlanDraft?
     @State private var generationMessage: String?
     @State private var isGeneratingDraft = false
@@ -24,7 +25,10 @@ struct TripDetailView: View {
     }
 
     private var selectedInterests: [String] {
-        travelSettings.first?.visibleSelectedInterests ?? []
+        TravelPreferencesStorage.visibleSelectedInterests(
+            selected: TravelPreferencesStorage.decodeInterests(from: selectedInterestNamesData),
+            custom: TravelPreferencesStorage.decodeInterests(from: customInterestNamesData)
+        )
     }
 
     var body: some View {

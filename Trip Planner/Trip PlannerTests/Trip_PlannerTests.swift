@@ -407,6 +407,47 @@ struct TripPlannerFoundationTests {
         #expect(persistedSetting.visibleSelectedInterests == ["Hikes", "Gardens", "Jazz Clubs"])
     }
 
+    @Test("Travel preferences encode and mutate selected interests")
+    func travelPreferencesEncodeAndMutateSelectedInterests() {
+        let encoded = TravelPreferencesStorage.encodeInterests([
+            " Museums ",
+            "museums",
+            "Local Food",
+            ""
+        ])
+
+        #expect(TravelPreferencesStorage.decodeInterests(from: encoded) == ["Museums", "Local Food"])
+        #expect(TravelPreferencesStorage.decodeInterests(from: "not json") == [])
+
+        let selectedMuseums = TravelPreferencesStorage.toggledInterest("Museums", selected: [])
+        #expect(selectedMuseums == ["Museums"])
+        #expect(TravelPreferencesStorage.toggledInterest("museums", selected: selectedMuseums).isEmpty)
+
+        let updated = TravelPreferencesStorage.addingCustomInterest(
+            " Gardens ",
+            selected: selectedMuseums,
+            custom: []
+        )
+
+        #expect(updated.selected == ["Museums", "Gardens"])
+        #expect(updated.custom == ["Gardens"])
+        #expect(
+            TravelPreferencesStorage.visibleSelectedInterests(
+                selected: updated.selected,
+                custom: updated.custom
+            ) == ["Museums", "Gardens"]
+        )
+
+        let removed = TravelPreferencesStorage.removingCustomInterest(
+            "gardens",
+            selected: updated.selected,
+            custom: updated.custom
+        )
+
+        #expect(removed.selected == ["Museums"])
+        #expect(removed.custom.isEmpty)
+    }
+
     @MainActor
     @Test("Travel settings store reuses the persisted settings row")
     func travelSettingsStoreReusesPersistedSettingsRow() throws {

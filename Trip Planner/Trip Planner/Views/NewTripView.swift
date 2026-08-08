@@ -4,7 +4,6 @@ import SwiftUI
 struct NewTripView: View {
     @Environment(\.dismiss) private var dismiss
 
-    let settings: TravelSettings?
     let saveTrip: (Trip) -> Void
 
     @State private var title = ""
@@ -17,22 +16,20 @@ struct NewTripView: View {
     @State private var destinationSuggestionService: DestinationSuggestionService
 
     init(
-        settings: TravelSettings?,
+        defaultDurationDays: Int,
+        defaultWindowLengthDays: Int,
         userLocation: CLLocation?,
         saveTrip: @escaping (Trip) -> Void
     ) {
-        self.settings = settings
         self.saveTrip = saveTrip
 
         let calendar = Calendar.current
         let startDate = calendar.startOfDay(for: .now)
-        let defaultDurationDays = settings?.defaultDurationDays ?? TravelSettings.defaultDurationDays
-        let defaultWindowLengthDays = settings?.defaultWindowLengthDays ?? TravelSettings.defaultWindowLengthDays
         let endDate = calendar.date(byAdding: .day, value: max(0, defaultWindowLengthDays - 1), to: startDate) ?? startDate
 
         _windowStartDate = State(initialValue: startDate)
         _windowEndDate = State(initialValue: endDate)
-        _durationDays = State(initialValue: defaultDurationDays)
+        _durationDays = State(initialValue: max(1, defaultDurationDays))
         _destinationSuggestionService = State(initialValue: DestinationSuggestionService(userLocation: userLocation))
     }
 
