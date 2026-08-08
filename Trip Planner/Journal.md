@@ -155,6 +155,16 @@ Sixth follow-up: the cleanest generated-trip lifecycle is "draft in memory, inse
 
 Seventh follow-up: the simulator finally told the truth with a Core Data migration error. `TravelSettings` had gained mandatory array attributes after earlier builds already created stores without those columns. SwiftData could not invent values during lightweight migration, so the whole container failed to load and no trips could persist. The active settings UI already uses AppStorage, so the fix was to make those legacy SwiftData arrays optional and normalize nil to empty arrays in code.
 
+Eighth follow-up: Swift 6's default main-actor isolation is a strict maître d'. It noticed two places where UI-bound work and pure value conversion were standing in the wrong line. Apple Maps launching now declares its main-actor boundary directly, and the editable itinerary conversion helpers are explicitly nonisolated because they only copy value data.
+
+### 2026-08-08: Issue #45 Lets Travelers Add Real Places, Not Just Text
+
+Issue `#45` moves manual itinerary editing from "type whatever you remember" toward "pick the real place, then tweak it." Each editable itinerary item now has a MapKit-powered place finder scoped by the trip destination and, when permission exists, the traveler's current location. Selecting a result fills the name, address, coordinates, phone number, and MapKit place identifier, but the fields stay editable because travel planning always has exceptions.
+
+The architecture lesson is to save facts, not framework objects. `MKMapItem` is useful while searching, but the app stores small durable values on `ItineraryItem`: coordinates for directions, a formatted address for humans, and optional metadata for richer future features. That keeps SwiftData persistence boring, which is exactly what persistence should be.
+
+Follow-up bug: MapKit's region can be a polite suggestion instead of a locked door. Activity search originally biased results near the traveler, but it could still offer places on another continent. The fix was to use the same Near You radius from Settings, make MapKit's region priority required, and filter resolved map items by actual distance from the current location when available.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

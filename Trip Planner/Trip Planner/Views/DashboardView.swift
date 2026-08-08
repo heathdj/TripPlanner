@@ -123,6 +123,8 @@ struct DashboardView: View {
             TripDetailView(
                 trip: presentedTrip.trip,
                 distanceSummary: distanceSummary(for: presentedTrip.trip),
+                userLocation: locationService.currentLocation,
+                nearYouDistanceKilometers: nearYouDistanceKilometers,
                 startsGeneratingDraftOnAppear: presentedTrip.startsGeneratingDraftOnAppear,
                 generatedTripSaved: saveGeneratedTrip
             )

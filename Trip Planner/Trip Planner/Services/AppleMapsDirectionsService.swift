@@ -4,6 +4,7 @@ import MapKit
 import UIKit
 
 enum AppleMapsDirectionsService {
+    @MainActor
     static func openDirections(for item: ItineraryItem, in trip: Trip) {
         if let mapItem = coordinateMapItem(for: item) {
             MKMapItem.openMaps(

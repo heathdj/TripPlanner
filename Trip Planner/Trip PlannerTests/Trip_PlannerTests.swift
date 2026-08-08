@@ -128,6 +128,29 @@ struct TripPlannerFoundationTests {
     }
 
     @MainActor
+    @Test("Reviewed itinerary items preserve selected place metadata", .bug("https://github.com/heathdj/TripPlanner/issues/45"))
+    func reviewedItineraryItemsPreserveSelectedPlaceMetadata() {
+        let item = ItineraryItem(
+            name: "Opera House",
+            notesOrAddress: "Bennelong Point, Sydney NSW, Australia",
+            category: .activity,
+            dayNumber: 1,
+            latitude: -33.8568,
+            longitude: 151.2153,
+            mapItemIdentifier: "apple-map-item-id",
+            phoneNumber: "+61 2 9250 7111",
+            pointOfInterestCategoryName: "MKPOICategoryTheater"
+        )
+
+        let reviewedItems = ReviewedTripPlanStore.reviewedItems(from: [item])
+
+        #expect(reviewedItems.first?.mapItemIdentifier == "apple-map-item-id")
+        #expect(reviewedItems.first?.phoneNumber == "+61 2 9250 7111")
+        #expect(reviewedItems.first?.pointOfInterestCategoryName == "MKPOICategoryTheater")
+        #expect(reviewedItems.first?.hasCoordinate == true)
+    }
+
+    @MainActor
     @Test("Open trips sort by upcoming window", .bug("https://github.com/heathdj/TripPlanner/issues/2"))
     func openTripsSortByUpcomingWindow() {
         let late = trip(title: "Late", startDay: 20, endDay: 24, status: .open)
@@ -638,6 +661,16 @@ struct TripPlannerFoundationTests {
 
         #expect(city.displayText == "Sydney, New South Wales, Australia")
         #expect(country.displayText == "Japan")
+    }
+
+    @Test("Activity place suggestions combine title and subtitle cleanly", .bug("https://github.com/heathdj/TripPlanner/issues/45"))
+    func activityPlaceSuggestionsCombineTitleAndSubtitleCleanly() {
+        let place = ActivityPlaceSuggestion(title: "Sydney Opera House", subtitle: "Bennelong Point")
+        let manualFallback = ActivityPlaceSuggestion(title: "Neighborhood walk", subtitle: "")
+
+        #expect(place.displayText == "Sydney Opera House, Bennelong Point")
+        #expect(manualFallback.displayText == "Neighborhood walk")
+        #expect(place.hasResolvedPlaceDetails == false)
     }
 
     @MainActor

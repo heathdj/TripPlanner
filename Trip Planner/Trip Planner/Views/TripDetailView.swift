@@ -1,3 +1,4 @@
+import CoreLocation
 import SwiftData
 import SwiftUI
 
@@ -17,8 +18,9 @@ struct TripDetailView: View {
 
     let trip: Trip
     var distanceSummary: String?
+    var userLocation: CLLocation?
+    var nearYouDistanceKilometers = TravelSettings.defaultNearYouDistanceKilometers
     var startsGeneratingDraftOnAppear = false
-    var openDirections: (ItineraryItem, Trip) -> Void = AppleMapsDirectionsService.openDirections
     var tripPlanGenerator: any TripPlanGenerating = FoundationModelsTripPlanGenerator()
     var generatedTripSaved: (Trip) -> Void = { _ in }
 
@@ -66,8 +68,7 @@ struct TripDetailView: View {
                         )
                         ItinerarySection(
                             trip: trip,
-                            items: trip.itineraryItems,
-                            openDirections: openDirections
+                            items: trip.itineraryItems
                         )
                     }
                     .padding()
@@ -115,6 +116,8 @@ struct TripDetailView: View {
                 GeneratedPlanReviewSheet(
                     trip: trip,
                     plan: $editablePlan,
+                    userLocation: userLocation,
+                    nearYouDistanceKilometers: nearYouDistanceKilometers,
                     savePlan: saveReviewedPlan
                 )
             }
@@ -572,7 +575,7 @@ private struct EditableTripPlan {
     var overview: String
     var items: [EditableItineraryItem]
 
-    init(
+    nonisolated init(
         title: String = "",
         overview: String = "",
         items: [EditableItineraryItem] = []
@@ -582,11 +585,11 @@ private struct EditableTripPlan {
         self.items = items
     }
 
-    init(draft: TripPlanDraft) {
+    nonisolated init(draft: TripPlanDraft) {
         self.init(
             title: draft.title,
             overview: draft.overview,
-            items: draft.items.map(EditableItineraryItem.init)
+            items: draft.items.map { EditableItineraryItem(item: $0) }
         )
     }
 
@@ -615,15 +618,21 @@ private struct EditableItineraryItem: Identifiable {
     var dayNumber: Int
     var latitude: Double?
     var longitude: Double?
+    var mapItemIdentifier: String?
+    var phoneNumber: String?
+    var pointOfInterestCategoryName: String?
 
-    init(
+    nonisolated init(
         id: UUID = UUID(),
         name: String = "",
         notesOrAddress: String = "",
         category: ItineraryItemCategory = .activity,
         dayNumber: Int = 1,
         latitude: Double? = nil,
-        longitude: Double? = nil
+        longitude: Double? = nil,
+        mapItemIdentifier: String? = nil,
+        phoneNumber: String? = nil,
+        pointOfInterestCategoryName: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -632,9 +641,12 @@ private struct EditableItineraryItem: Identifiable {
         self.dayNumber = max(1, dayNumber)
         self.latitude = latitude
         self.longitude = longitude
+        self.mapItemIdentifier = mapItemIdentifier
+        self.phoneNumber = phoneNumber
+        self.pointOfInterestCategoryName = pointOfInterestCategoryName
     }
 
-    init(item: ItineraryItem) {
+    nonisolated init(item: ItineraryItem) {
         self.init(
             id: item.id,
             name: item.name,
@@ -642,7 +654,10 @@ private struct EditableItineraryItem: Identifiable {
             category: item.category,
             dayNumber: item.dayNumber,
             latitude: item.latitude,
-            longitude: item.longitude
+            longitude: item.longitude,
+            mapItemIdentifier: item.mapItemIdentifier,
+            phoneNumber: item.phoneNumber,
+            pointOfInterestCategoryName: item.pointOfInterestCategoryName
         )
     }
 
@@ -654,7 +669,10 @@ private struct EditableItineraryItem: Identifiable {
             category: category,
             dayNumber: dayNumber,
             latitude: latitude,
-            longitude: longitude
+            longitude: longitude,
+            mapItemIdentifier: mapItemIdentifier,
+            phoneNumber: phoneNumber,
+            pointOfInterestCategoryName: pointOfInterestCategoryName
         )
     }
 }
@@ -664,6 +682,8 @@ private struct GeneratedPlanReviewSheet: View {
 
     let trip: Trip
     @Binding var plan: EditableTripPlan
+    let userLocation: CLLocation?
+    let nearYouDistanceKilometers: Double
     let savePlan: (EditableTripPlan) throws -> Void
 
     @State private var saveErrorMessage: String?
@@ -696,6 +716,8 @@ private struct GeneratedPlanReviewSheet: View {
                         EditableItineraryItemSection(
                             trip: trip,
                             item: $item,
+                            userLocation: userLocation,
+                            nearYouDistanceKilometers: nearYouDistanceKilometers,
                             deleteItem: {
                                 deleteItem(id: item.id)
                             }
@@ -712,6 +734,8 @@ private struct GeneratedPlanReviewSheet: View {
                         EditableItineraryItemSection(
                             trip: trip,
                             item: pendingItemBinding,
+                            userLocation: userLocation,
+                            nearYouDistanceKilometers: nearYouDistanceKilometers,
                             confirmItem: confirmPendingItem,
                             deleteItem: cancelPendingItem
                         )
@@ -811,9 +835,47 @@ private struct GeneratedPlanReviewSheet: View {
 
 private struct EditableItineraryItemSection: View {
     let trip: Trip
+    let userLocation: CLLocation?
+    let nearYouDistanceKilometers: Double
     @Binding var item: EditableItineraryItem
     var confirmItem: (() -> Void)?
     let deleteItem: () -> Void
+
+    @State private var placeQuery = ""
+    @State private var placeSearch: ActivityPlaceSearchService
+
+    init(
+        trip: Trip,
+        item: Binding<EditableItineraryItem>,
+        userLocation: CLLocation?,
+        nearYouDistanceKilometers: Double,
+        confirmItem: (() -> Void)? = nil,
+        deleteItem: @escaping () -> Void
+    ) {
+        self.trip = trip
+        self.userLocation = userLocation
+        self.nearYouDistanceKilometers = nearYouDistanceKilometers
+        _item = item
+        self.confirmItem = confirmItem
+        self.deleteItem = deleteItem
+
+        let destinationCoordinate: CLLocationCoordinate2D?
+        if let latitude = trip.latitude,
+           let longitude = trip.longitude {
+            destinationCoordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        } else {
+            destinationCoordinate = nil
+        }
+
+        _placeSearch = State(
+            initialValue: ActivityPlaceSearchService(
+                destination: trip.location,
+                destinationCoordinate: destinationCoordinate,
+                userLocation: userLocation,
+                nearYouDistanceKilometers: nearYouDistanceKilometers
+            )
+        )
+    }
 
     private var canConfirm: Bool {
         item.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
@@ -847,6 +909,61 @@ private struct EditableItineraryItemSection: View {
                 .accessibilityLabel("Delete \(item.name.isEmpty ? "item" : item.name)")
             }
 
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    TextField("Find a place near \(trip.location)", text: $placeQuery)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .onChange(of: placeQuery) {
+                            placeSearch.updateQuery(placeQuery)
+                        }
+
+                    Button("Search", systemImage: "magnifyingglass") {
+                        searchEnteredPlace()
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .disabled(placeQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityLabel("Search places")
+                }
+
+                if placeSearch.suggestions.isEmpty == false {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(placeSearch.suggestions) { suggestion in
+                            Button {
+                                selectPlace(suggestion)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(suggestion.title)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.primary)
+
+                                    if suggestion.subtitle.isEmpty == false {
+                                        Text(suggestion.subtitle)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(suggestion.displayText)
+                            .accessibilityHint("Fills this itinerary item with this place")
+                        }
+                    }
+                }
+
+                if placeSearch.isResolvingPlace {
+                    Label("Finding place details", systemImage: "location.magnifyingglass")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if let errorMessage = placeSearch.errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             TextField("Name", text: $item.name)
                 .textInputAutocapitalization(.words)
 
@@ -878,6 +995,57 @@ private struct EditableItineraryItemSection: View {
         .padding(.vertical, 6)
     }
 
+    private func searchEnteredPlace() {
+        Task {
+            guard let suggestion = await placeSearch.searchEnteredPlace(placeQuery) else { return }
+            applyPlaceSuggestion(suggestion)
+        }
+    }
+
+    private func selectPlace(_ suggestion: ActivityPlaceSuggestion) {
+        Task {
+            let resolvedSuggestion = await placeSearch.resolvedSuggestion(for: suggestion)
+            applyPlaceSuggestion(resolvedSuggestion)
+        }
+    }
+
+    private func applyPlaceSuggestion(_ suggestion: ActivityPlaceSuggestion) {
+        item.name = suggestion.title
+
+        if suggestion.address.isEmpty == false {
+            item.notesOrAddress = suggestion.address
+        } else if suggestion.subtitle.isEmpty == false {
+            item.notesOrAddress = suggestion.subtitle
+        }
+
+        item.latitude = suggestion.latitude
+        item.longitude = suggestion.longitude
+        item.mapItemIdentifier = suggestion.mapItemIdentifier
+        item.phoneNumber = suggestion.phoneNumber
+        item.pointOfInterestCategoryName = suggestion.pointOfInterestCategoryName
+        item.category = category(for: suggestion.pointOfInterestCategoryName)
+        placeQuery = suggestion.displayText
+        placeSearch.clearSuggestions()
+    }
+
+    private func category(for pointOfInterestCategoryName: String?) -> ItineraryItemCategory {
+        let normalized = pointOfInterestCategoryName?.lowercased() ?? ""
+
+        if normalized.contains("restaurant") || normalized.contains("cafe") || normalized.contains("food") || normalized.contains("brewery") || normalized.contains("winery") {
+            return .food
+        }
+
+        if normalized.contains("hotel") || normalized.contains("lodging") {
+            return .stay
+        }
+
+        if normalized.contains("airport") || normalized.contains("parking") || normalized.contains("publictransport") {
+            return .transit
+        }
+
+        return .activity
+    }
+
     private var dayBinding: Binding<Int> {
         Binding {
             min(max(1, item.dayNumber), max(1, trip.durationDays))
@@ -890,7 +1058,6 @@ private struct EditableItineraryItemSection: View {
 private struct ItinerarySection: View {
     let trip: Trip
     let items: [ItineraryItem]
-    let openDirections: (ItineraryItem, Trip) -> Void
 
     var body: some View {
         GlassPanel {
@@ -907,8 +1074,7 @@ private struct ItinerarySection: View {
                         ForEach(items) { item in
                             ItineraryItemRow(
                                 trip: trip,
-                                item: item,
-                                openDirections: openDirections
+                                item: item
                             )
                         }
                     }
@@ -921,7 +1087,6 @@ private struct ItinerarySection: View {
 private struct ItineraryItemRow: View {
     let trip: Trip
     let item: ItineraryItem
-    let openDirections: (ItineraryItem, Trip) -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -971,7 +1136,7 @@ private struct ItineraryItemRow: View {
                 }
 
                 Button("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill") {
-                    openDirections(item, trip)
+                    AppleMapsDirectionsService.openDirections(for: item, in: trip)
                 }
                 .buttonStyle(.glass)
                 .accessibilityLabel(item.directionsAccessibilityLabel)
