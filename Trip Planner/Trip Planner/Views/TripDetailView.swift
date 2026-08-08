@@ -13,6 +13,7 @@ struct TripDetailView: View {
     @State private var generationMessage: String?
     @State private var isGeneratingDraft = false
     @State private var didStartInitialGeneration = false
+    @State private var hasSavedReviewedPlan = false
 
     let trip: Trip
     var distanceSummary: String?
@@ -32,6 +33,14 @@ struct TripDetailView: View {
             selected: TravelPreferencesStorage.decodeInterests(from: selectedInterestNamesData),
             custom: TravelPreferencesStorage.decodeInterests(from: customInterestNamesData)
         )
+    }
+
+    private var isGeneratedTripFlow: Bool {
+        startsGeneratingDraftOnAppear
+    }
+
+    private var canSaveGeneratedTrip: Bool {
+        hasSavedReviewedPlan || savedPlan != nil
     }
 
     var body: some View {
@@ -70,11 +79,27 @@ struct TripDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
-                        dismiss()
+                    if isGeneratedTripFlow {
+                        Button("Cancel") {
+                            cancelGeneratedTrip()
+                        }
+                    } else {
+                        Button("Done") {
+                            dismiss()
+                        }
+                    }
+                }
+
+                if isGeneratedTripFlow {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") {
+                            dismiss()
+                        }
+                        .disabled(canSaveGeneratedTrip == false)
                     }
                 }
             }
+            .interactiveDismissDisabled(isGeneratedTripFlow && canSaveGeneratedTrip == false)
             .task {
                 guard startsGeneratingDraftOnAppear,
                       didStartInitialGeneration == false
@@ -142,6 +167,16 @@ struct TripDetailView: View {
             in: modelContext
         )
         generatedDraft = nil
+        hasSavedReviewedPlan = true
+    }
+
+    private func cancelGeneratedTrip() {
+        if canSaveGeneratedTrip == false {
+            modelContext.delete(trip)
+            try? modelContext.save()
+        }
+
+        dismiss()
     }
 }
 
@@ -630,6 +665,7 @@ private struct GeneratedPlanReviewSheet: View {
                             Button("Delete", systemImage: "trash", role: .destructive) {
                                 deleteItem(id: item.id)
                             }
+                            .tint(.red)
                         }
                     }
 
@@ -644,6 +680,7 @@ private struct GeneratedPlanReviewSheet: View {
                             Button("Discard", systemImage: "trash", role: .destructive) {
                                 cancelPendingItem()
                             }
+                            .tint(.red)
                         }
                     }
 

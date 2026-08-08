@@ -143,6 +143,8 @@ The engineering lesson is that AI workflows need a customs checkpoint. Generated
 
 Follow-up bug: editable rows inside `Form` need careful button behavior. The first review sheet put a trash button in a row that also had form controls, and taps could be stolen by the row's picker-style interaction. The fix was to make row actions explicit borderless icon buttons, add native swipe-to-delete, and make manual additions pass through a green checkmark before they become real plan items. We also taught generated and saved plans to keep only one departure event, because a trip only needs one "time to go home" moment.
 
+Second follow-up: a newly generated trip needs a clear finish line. The detail sheet now treats the auto-generation path like a provisional workspace: Cancel can discard it before review is saved, and Save only lights up after the reviewed plan has been saved. That makes the lifecycle visible instead of hiding the important decision behind a generic Done button.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.
