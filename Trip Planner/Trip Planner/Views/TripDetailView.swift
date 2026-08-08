@@ -141,7 +141,9 @@ struct TripDetailView: View {
             do {
                 generatedDraft = try await tripPlanGenerator.generateDraft(for: input)
                 if let generatedDraft {
-                    editablePlan = EditableTripPlan(draft: generatedDraft)
+                    generationMessage = "Adding available place details..."
+                    editablePlan = await enrichedPlan(from: generatedDraft)
+                    generationMessage = nil
                     isShowingReviewSheet = true
                 }
             } catch let error as TripPlanGenerationError {
@@ -158,10 +160,15 @@ struct TripDetailView: View {
 
     private func reviewDraft() {
         if let generatedDraft {
-            editablePlan = EditableTripPlan(draft: generatedDraft)
+            Task {
+                generationMessage = "Adding available place details..."
+                editablePlan = await enrichedPlan(from: generatedDraft)
+                generationMessage = nil
+                isShowingReviewSheet = true
+            }
+        } else {
+            isShowingReviewSheet = true
         }
-
-        isShowingReviewSheet = true
     }
 
     private func saveReviewedPlan(_ plan: EditableTripPlan) throws {
@@ -235,6 +242,22 @@ struct TripDetailView: View {
             trip.updatedAt = .now
             try? modelContext.save()
         }
+    }
+
+    private func enrichedPlan(from draft: TripPlanDraft) async -> EditableTripPlan {
+        var plan = EditableTripPlan(draft: draft)
+        var enrichedItems = [EditableItineraryItem]()
+
+        for item in plan.itineraryItems {
+            if let enrichedItem = try? await PlaceMetadataRefreshService.refreshedItem(item, in: trip) {
+                enrichedItems.append(EditableItineraryItem(item: enrichedItem))
+            } else {
+                enrichedItems.append(EditableItineraryItem(item: item))
+            }
+        }
+
+        plan.items = enrichedItems
+        return plan
     }
 }
 
