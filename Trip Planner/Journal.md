@@ -151,6 +151,8 @@ Fourth follow-up: a button named Save should save, not merely close the curtain.
 
 Fifth follow-up: Dashboard needed to confirm the saved trip by identity, not by trusting the sheet's model reference. The save callback now fetches the trip by UUID, updates the persisted instance, and clears the presented sheet state. That gives the `@Query` driving Open Trips the best chance to see the exact saved row.
 
+Sixth follow-up: the cleanest generated-trip lifecycle is "draft in memory, insert on final Save." Creating a trip before review made every later button responsible for preserving a provisional database row. Now the new trip stays in memory until the user presses the top-level Save, which inserts it once with the reviewed itinerary. Cancel cleans up any reviewed-plan draft rows so abandoned generated trips do not leave orphaned data behind.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

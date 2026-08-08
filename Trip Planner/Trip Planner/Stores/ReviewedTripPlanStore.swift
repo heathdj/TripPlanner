@@ -33,14 +33,9 @@ enum ReviewedTripPlanStore {
                 )
             }
 
-        return removingDuplicateDepartureItems(from: reviewedItems)
-            .sorted { lhs, rhs in
-                if lhs.dayNumber == rhs.dayNumber {
-                    return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
-                }
-
-            return lhs.dayNumber < rhs.dayNumber
-        }
+        return TripStore.sortedItineraryItems(
+            removingDuplicateDepartureItems(from: reviewedItems)
+        )
     }
 
     static func removingDuplicateDepartureItems(from items: [ItineraryItem]) -> [ItineraryItem] {

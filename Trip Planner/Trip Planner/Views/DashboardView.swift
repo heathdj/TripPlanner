@@ -145,8 +145,6 @@ struct DashboardView: View {
     }
 
     private func createTrip(_ trip: Trip) {
-        modelContext.insert(trip)
-        try? modelContext.save()
         pendingCreatedTrip = trip
     }
 
@@ -162,6 +160,8 @@ struct DashboardView: View {
         let savedTrip = fetchedTrips.first ?? trip
         savedTrip.status = .open
         savedTrip.updatedAt = .now
+        savedTrip.itineraryItems = TripStore.sortedItineraryItems(savedTrip.itineraryItems)
+        savedTrip.updateProgress(completedItems: 0, plannedItems: savedTrip.itineraryItems.count)
 
         if fetchedTrips.isEmpty {
             modelContext.insert(savedTrip)

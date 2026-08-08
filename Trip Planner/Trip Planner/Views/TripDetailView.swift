@@ -189,12 +189,33 @@ struct TripDetailView: View {
     }
 
     private func cancelGeneratedTrip() {
-        if canSaveGeneratedTrip == false {
-            modelContext.delete(trip)
-            try? modelContext.save()
-        }
+        discardGeneratedTrip()
 
         dismiss()
+    }
+
+    private func discardGeneratedTrip() {
+        let tripID = trip.id
+        let tripDescriptor = FetchDescriptor<Trip>(
+            predicate: #Predicate { savedTrip in
+                savedTrip.id == tripID
+            }
+        )
+        let planDescriptor = FetchDescriptor<ReviewedTripPlan>(
+            predicate: #Predicate { plan in
+                plan.tripID == tripID
+            }
+        )
+
+        if let savedTrips = try? modelContext.fetch(tripDescriptor) {
+            savedTrips.forEach { modelContext.delete($0) }
+        }
+
+        if let savedPlans = try? modelContext.fetch(planDescriptor) {
+            savedPlans.forEach { modelContext.delete($0) }
+        }
+
+        try? modelContext.save()
     }
 }
 
