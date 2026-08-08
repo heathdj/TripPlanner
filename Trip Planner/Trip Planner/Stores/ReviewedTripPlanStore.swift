@@ -32,7 +32,15 @@ enum ReviewedTripPlanStore {
                     longitude: item.longitude,
                     mapItemIdentifier: item.mapItemIdentifier,
                     phoneNumber: item.phoneNumber,
-                    pointOfInterestCategoryName: item.pointOfInterestCategoryName
+                    pointOfInterestCategoryName: item.pointOfInterestCategoryName,
+                    placeAddress: item.placeAddress,
+                    placePhoneNumber: item.placePhoneNumber,
+                    placeWebsite: item.placeWebsite,
+                    placeCategory: item.placeCategory,
+                    placeHours: item.placeHours,
+                    placeCost: item.placeCost,
+                    placeTimeZoneIdentifier: item.placeTimeZoneIdentifier,
+                    placeAttribution: item.placeAttribution
                 )
             }
 

@@ -1,6 +1,7 @@
 import CoreLocation
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct TripDetailView: View {
     @Environment(\.dismiss) private var dismiss
@@ -68,7 +69,8 @@ struct TripDetailView: View {
                         )
                         ItinerarySection(
                             trip: trip,
-                            items: trip.itineraryItems
+                            items: trip.itineraryItems,
+                            refreshItem: refreshPlaceDetails
                         )
                     }
                     .padding()
@@ -219,6 +221,20 @@ struct TripDetailView: View {
         }
 
         try? modelContext.save()
+    }
+
+    private func refreshPlaceDetails(for item: ItineraryItem) {
+        Task {
+            guard let refreshedItem = try? await PlaceMetadataRefreshService.refreshedItem(item, in: trip),
+                  let itemIndex = trip.itineraryItems.firstIndex(where: { $0.id == item.id })
+            else {
+                return
+            }
+
+            trip.itineraryItems[itemIndex] = refreshedItem
+            trip.updatedAt = .now
+            try? modelContext.save()
+        }
     }
 }
 
@@ -621,6 +637,14 @@ private struct EditableItineraryItem: Identifiable {
     var mapItemIdentifier: String?
     var phoneNumber: String?
     var pointOfInterestCategoryName: String?
+    var placeAddress: PlaceDetailValue?
+    var placePhoneNumber: PlaceDetailValue?
+    var placeWebsite: PlaceDetailValue?
+    var placeCategory: PlaceDetailValue?
+    var placeHours: PlaceDetailValue?
+    var placeCost: PlaceDetailValue?
+    var placeTimeZoneIdentifier: String?
+    var placeAttribution: PlaceDetailValue?
 
     nonisolated init(
         id: UUID = UUID(),
@@ -632,7 +656,15 @@ private struct EditableItineraryItem: Identifiable {
         longitude: Double? = nil,
         mapItemIdentifier: String? = nil,
         phoneNumber: String? = nil,
-        pointOfInterestCategoryName: String? = nil
+        pointOfInterestCategoryName: String? = nil,
+        placeAddress: PlaceDetailValue? = nil,
+        placePhoneNumber: PlaceDetailValue? = nil,
+        placeWebsite: PlaceDetailValue? = nil,
+        placeCategory: PlaceDetailValue? = nil,
+        placeHours: PlaceDetailValue? = nil,
+        placeCost: PlaceDetailValue? = nil,
+        placeTimeZoneIdentifier: String? = nil,
+        placeAttribution: PlaceDetailValue? = nil
     ) {
         self.id = id
         self.name = name
@@ -644,6 +676,14 @@ private struct EditableItineraryItem: Identifiable {
         self.mapItemIdentifier = mapItemIdentifier
         self.phoneNumber = phoneNumber
         self.pointOfInterestCategoryName = pointOfInterestCategoryName
+        self.placeAddress = placeAddress
+        self.placePhoneNumber = placePhoneNumber
+        self.placeWebsite = placeWebsite
+        self.placeCategory = placeCategory
+        self.placeHours = placeHours
+        self.placeCost = placeCost
+        self.placeTimeZoneIdentifier = placeTimeZoneIdentifier
+        self.placeAttribution = placeAttribution
     }
 
     nonisolated init(item: ItineraryItem) {
@@ -657,7 +697,15 @@ private struct EditableItineraryItem: Identifiable {
             longitude: item.longitude,
             mapItemIdentifier: item.mapItemIdentifier,
             phoneNumber: item.phoneNumber,
-            pointOfInterestCategoryName: item.pointOfInterestCategoryName
+            pointOfInterestCategoryName: item.pointOfInterestCategoryName,
+            placeAddress: item.placeAddress,
+            placePhoneNumber: item.placePhoneNumber,
+            placeWebsite: item.placeWebsite,
+            placeCategory: item.placeCategory,
+            placeHours: item.placeHours,
+            placeCost: item.placeCost,
+            placeTimeZoneIdentifier: item.placeTimeZoneIdentifier,
+            placeAttribution: item.placeAttribution
         )
     }
 
@@ -672,8 +720,44 @@ private struct EditableItineraryItem: Identifiable {
             longitude: longitude,
             mapItemIdentifier: mapItemIdentifier,
             phoneNumber: phoneNumber,
-            pointOfInterestCategoryName: pointOfInterestCategoryName
+            pointOfInterestCategoryName: pointOfInterestCategoryName,
+            placeAddress: normalizedDetail(placeAddress, fallback: notesOrAddress, source: .user),
+            placePhoneNumber: normalizedDetail(placePhoneNumber, fallback: phoneNumber, source: .user),
+            placeWebsite: normalizedDetail(placeWebsite, fallback: nil, source: .user),
+            placeCategory: normalizedDetail(placeCategory, fallback: pointOfInterestCategoryName, source: .user),
+            placeHours: normalizedDetail(placeHours, fallback: nil, source: .user),
+            placeCost: normalizedDetail(placeCost, fallback: nil, source: .user),
+            placeTimeZoneIdentifier: placeTimeZoneIdentifier,
+            placeAttribution: placeAttribution
         )
+    }
+
+    private func normalizedDetail(
+        _ detail: PlaceDetailValue?,
+        fallback: String?,
+        source: PlaceDetailSource
+    ) -> PlaceDetailValue? {
+        if let detail,
+           detail.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            return detail
+        }
+
+        guard let fallback = fallback?.trimmingCharacters(in: .whitespacesAndNewlines),
+              fallback.isEmpty == false
+        else {
+            return nil
+        }
+
+        return PlaceDetailValue(value: fallback, source: source)
+    }
+
+    mutating func setPlaceDetail(
+        _ keyPath: WritableKeyPath<EditableItineraryItem, PlaceDetailValue?>,
+        value: String,
+        source: PlaceDetailSource
+    ) {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        self[keyPath: keyPath] = normalized.isEmpty ? nil : PlaceDetailValue(value: normalized, source: source)
     }
 }
 
@@ -971,6 +1055,29 @@ private struct EditableItineraryItemSection: View {
                 .lineLimit(2...4)
                 .textInputAutocapitalization(.sentences)
 
+            TextField("Verified address", text: detailBinding(\.placeAddress))
+                .textInputAutocapitalization(.words)
+
+            TextField("Website", text: detailBinding(\.placeWebsite))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.URL)
+
+            TextField("Phone", text: detailBinding(\.placePhoneNumber))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.phonePad)
+
+            TextField("Business category", text: detailBinding(\.placeCategory))
+                .textInputAutocapitalization(.words)
+
+            TextField("Hours", text: detailBinding(\.placeHours), axis: .vertical)
+                .lineLimit(2...4)
+                .textInputAutocapitalization(.sentences)
+
+            TextField("Cost guidance", text: detailBinding(\.placeCost))
+                .textInputAutocapitalization(.sentences)
+
             Picker("Category", selection: $item.category) {
                 ForEach(ItineraryItemCategory.allCases) { category in
                     Label(category.displayName, systemImage: category.systemImage)
@@ -1023,6 +1130,12 @@ private struct EditableItineraryItemSection: View {
         item.mapItemIdentifier = suggestion.mapItemIdentifier
         item.phoneNumber = suggestion.phoneNumber
         item.pointOfInterestCategoryName = suggestion.pointOfInterestCategoryName
+        item.placeTimeZoneIdentifier = suggestion.timeZoneIdentifier
+        item.placeAttribution = PlaceDetailValue(value: "Apple Maps", source: .provider)
+        item.setPlaceDetail(\.placeAddress, value: suggestion.address.isEmpty ? suggestion.subtitle : suggestion.address, source: .provider)
+        item.setPlaceDetail(\.placePhoneNumber, value: suggestion.phoneNumber ?? "", source: .provider)
+        item.setPlaceDetail(\.placeWebsite, value: suggestion.website ?? "", source: .provider)
+        item.setPlaceDetail(\.placeCategory, value: suggestion.pointOfInterestCategoryName ?? "", source: .provider)
         item.category = category(for: suggestion.pointOfInterestCategoryName)
         placeQuery = suggestion.displayText
         placeSearch.clearSuggestions()
@@ -1046,6 +1159,14 @@ private struct EditableItineraryItemSection: View {
         return .activity
     }
 
+    private func detailBinding(_ keyPath: WritableKeyPath<EditableItineraryItem, PlaceDetailValue?>) -> Binding<String> {
+        Binding {
+            item[keyPath: keyPath]?.value ?? ""
+        } set: { newValue in
+            item.setPlaceDetail(keyPath, value: newValue, source: .user)
+        }
+    }
+
     private var dayBinding: Binding<Int> {
         Binding {
             min(max(1, item.dayNumber), max(1, trip.durationDays))
@@ -1058,6 +1179,7 @@ private struct EditableItineraryItemSection: View {
 private struct ItinerarySection: View {
     let trip: Trip
     let items: [ItineraryItem]
+    let refreshItem: (ItineraryItem) -> Void
 
     var body: some View {
         GlassPanel {
@@ -1074,7 +1196,8 @@ private struct ItinerarySection: View {
                         ForEach(items) { item in
                             ItineraryItemRow(
                                 trip: trip,
-                                item: item
+                                item: item,
+                                refreshItem: refreshItem
                             )
                         }
                     }
@@ -1087,6 +1210,7 @@ private struct ItinerarySection: View {
 private struct ItineraryItemRow: View {
     let trip: Trip
     let item: ItineraryItem
+    let refreshItem: (ItineraryItem) -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -1135,16 +1259,127 @@ private struct ItineraryItemRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Button("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill") {
-                    AppleMapsDirectionsService.openDirections(for: item, in: trip)
+                if item.hasPlaceDetails {
+                    PlaceDetailsGrid(item: item)
                 }
-                .buttonStyle(.glass)
-                .accessibilityLabel(item.directionsAccessibilityLabel)
-                .accessibilityHint("Opens driving directions in Apple Maps")
+
+                HStack(spacing: 8) {
+                    Button("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill") {
+                        AppleMapsDirectionsService.openDirections(for: item, in: trip)
+                    }
+                    .buttonStyle(.glass)
+                    .accessibilityLabel(item.directionsAccessibilityLabel)
+                    .accessibilityHint("Opens driving directions in Apple Maps")
+
+                    if let websiteURL = validatedWebsiteURL {
+                        Button("Website", systemImage: "safari.fill") {
+                            UIApplication.shared.open(websiteURL)
+                        }
+                        .buttonStyle(.glass)
+                        .accessibilityLabel("Open website for \(item.name)")
+                    }
+
+                    if let phoneURL = validatedPhoneURL {
+                        Button("Call", systemImage: "phone.fill") {
+                            UIApplication.shared.open(phoneURL)
+                        }
+                        .buttonStyle(.glass)
+                        .accessibilityLabel("Call \(item.name)")
+                    }
+
+                    Button("Refresh", systemImage: "arrow.clockwise") {
+                        refreshItem(item)
+                    }
+                    .buttonStyle(.glass)
+                    .accessibilityLabel("Refresh place details for \(item.name)")
+                }
             }
         }
         .padding(12)
         .glassEffect(.regular.tint(.teal.opacity(0.08)), in: .rect(cornerRadius: 16))
         .accessibilityElement(children: .contain)
+    }
+
+    private var validatedWebsiteURL: URL? {
+        let rawValue = item.displayWebsite.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard rawValue.isEmpty == false,
+              var components = URLComponents(string: rawValue)
+        else {
+            return nil
+        }
+
+        if components.scheme == nil {
+            components.scheme = "https"
+        }
+
+        guard let scheme = components.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              components.host?.isEmpty == false
+        else {
+            return nil
+        }
+
+        return components.url
+    }
+
+    private var validatedPhoneURL: URL? {
+        let digits = item.displayPhoneNumber.filter(\.isNumber)
+        guard digits.count >= 7 else { return nil }
+        return URL(string: "tel://\(digits)")
+    }
+}
+
+private struct PlaceDetailsGrid: View {
+    let item: ItineraryItem
+
+    private var details: [(title: String, value: String, source: PlaceDetailSource?)] {
+        [
+            ("Address", item.displayAddress, item.placeAddress?.source),
+            ("Phone", item.displayPhoneNumber, item.placePhoneNumber?.source),
+            ("Website", item.displayWebsite, item.placeWebsite?.source),
+            ("Category", item.displayPlaceCategory, item.placeCategory?.source),
+            ("Hours", item.displayHoursWithTimeZone, item.placeHours?.source),
+            ("Cost", item.displayCost, item.placeCost?.source),
+            ("Attribution", item.placeAttribution?.value ?? "", item.placeAttribution?.source)
+        ]
+        .filter { $0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(details, id: \.title) { detail in
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(detail.title)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        if let source = detail.source {
+                            Text(source == .provider ? "Provider" : "Manual")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(source == .provider ? .teal : .orange)
+                        }
+                    }
+
+                    Text(detail.value)
+                        .font(.callout)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(.top, 4)
+    }
+}
+
+private extension ItineraryItem {
+    var displayHoursWithTimeZone: String {
+        guard displayHours.isEmpty == false else { return "" }
+
+        if let placeTimeZone {
+            return "\(displayHours) (\(placeTimeZone.identifier))"
+        }
+
+        return displayHours
     }
 }

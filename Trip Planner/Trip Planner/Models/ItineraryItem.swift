@@ -1,5 +1,22 @@
 import Foundation
 
+enum PlaceDetailSource: String, Codable, Hashable, Sendable {
+    case provider
+    case user
+}
+
+struct PlaceDetailValue: Codable, Hashable, Sendable {
+    var value: String
+    var source: PlaceDetailSource
+    var updatedAt: Date
+
+    init(value: String, source: PlaceDetailSource, updatedAt: Date = .now) {
+        self.value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.source = source
+        self.updatedAt = updatedAt
+    }
+}
+
 struct ItineraryItem: Codable, Hashable, Identifiable, Sendable {
     var id: UUID
     var name: String
@@ -11,6 +28,14 @@ struct ItineraryItem: Codable, Hashable, Identifiable, Sendable {
     var mapItemIdentifier: String?
     var phoneNumber: String?
     var pointOfInterestCategoryName: String?
+    var placeAddress: PlaceDetailValue?
+    var placePhoneNumber: PlaceDetailValue?
+    var placeWebsite: PlaceDetailValue?
+    var placeCategory: PlaceDetailValue?
+    var placeHours: PlaceDetailValue?
+    var placeCost: PlaceDetailValue?
+    var placeTimeZoneIdentifier: String?
+    var placeAttribution: PlaceDetailValue?
 
     init(
         id: UUID = UUID(),
@@ -22,7 +47,15 @@ struct ItineraryItem: Codable, Hashable, Identifiable, Sendable {
         longitude: Double? = nil,
         mapItemIdentifier: String? = nil,
         phoneNumber: String? = nil,
-        pointOfInterestCategoryName: String? = nil
+        pointOfInterestCategoryName: String? = nil,
+        placeAddress: PlaceDetailValue? = nil,
+        placePhoneNumber: PlaceDetailValue? = nil,
+        placeWebsite: PlaceDetailValue? = nil,
+        placeCategory: PlaceDetailValue? = nil,
+        placeHours: PlaceDetailValue? = nil,
+        placeCost: PlaceDetailValue? = nil,
+        placeTimeZoneIdentifier: String? = nil,
+        placeAttribution: PlaceDetailValue? = nil
     ) {
         self.id = id
         self.name = name
@@ -34,6 +67,14 @@ struct ItineraryItem: Codable, Hashable, Identifiable, Sendable {
         self.mapItemIdentifier = mapItemIdentifier
         self.phoneNumber = phoneNumber
         self.pointOfInterestCategoryName = pointOfInterestCategoryName
+        self.placeAddress = placeAddress
+        self.placePhoneNumber = placePhoneNumber
+        self.placeWebsite = placeWebsite
+        self.placeCategory = placeCategory
+        self.placeHours = placeHours
+        self.placeCost = placeCost
+        self.placeTimeZoneIdentifier = placeTimeZoneIdentifier
+        self.placeAttribution = placeAttribution
     }
 
     var hasCoordinate: Bool {
@@ -50,6 +91,47 @@ struct ItineraryItem: Codable, Hashable, Identifiable, Sendable {
 
     var directionsAccessibilityLabel: String {
         "Directions to \(name)"
+    }
+
+    var displayAddress: String {
+        placeAddress?.value.isEmpty == false ? placeAddress?.value ?? notesOrAddress : notesOrAddress
+    }
+
+    var displayPhoneNumber: String {
+        placePhoneNumber?.value.isEmpty == false ? placePhoneNumber?.value ?? phoneNumber ?? "" : phoneNumber ?? ""
+    }
+
+    var displayWebsite: String {
+        placeWebsite?.value ?? ""
+    }
+
+    var displayPlaceCategory: String {
+        placeCategory?.value.isEmpty == false ? placeCategory?.value ?? pointOfInterestCategoryName ?? "" : pointOfInterestCategoryName ?? ""
+    }
+
+    var displayHours: String {
+        placeHours?.value ?? ""
+    }
+
+    var displayCost: String {
+        placeCost?.value ?? ""
+    }
+
+    var placeTimeZone: TimeZone? {
+        guard let placeTimeZoneIdentifier else { return nil }
+        return TimeZone(identifier: placeTimeZoneIdentifier)
+    }
+
+    var hasPlaceDetails: Bool {
+        [
+            displayAddress,
+            displayPhoneNumber,
+            displayWebsite,
+            displayPlaceCategory,
+            displayHours,
+            displayCost
+        ]
+        .contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false }
     }
 
     func searchableDestination(in trip: Trip) -> String {
