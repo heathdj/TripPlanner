@@ -254,6 +254,24 @@ struct TripPlannerFoundationTests {
     }
 
     @MainActor
+    @Test("Generated trip drafts keep one departure event", .bug("https://github.com/heathdj/TripPlanner/issues/8"))
+    func generatedTripDraftsKeepOneDepartureEvent() {
+        let draft = TripPlanGenerationSanitizer.draft(
+            title: "Lisbon",
+            overview: "Draft",
+            items: [
+                TripPlanDraftItemInput(name: "Departure", notes: "Airport", category: .transit, dayNumber: 1),
+                TripPlanDraftItemInput(name: "Museum", notes: "Indoor option", category: .activity, dayNumber: 2),
+                TripPlanDraftItemInput(name: "Departure Event", notes: "Fly home", category: .transit, dayNumber: 4)
+            ],
+            durationDays: 4
+        )
+
+        #expect(draft.items.filter(\.isDepartureEvent).map(\.name) == ["Departure Event"])
+        #expect(draft.items.map(\.name) == ["Museum", "Departure Event"])
+    }
+
+    @MainActor
     @Test("Nearby grouping promotes only open trips inside the radius", .bug("https://github.com/heathdj/TripPlanner/issues/3"))
     func nearbyGroupingPromotesOpenTripsInsideRadius() {
         let userLocation = CLLocation(latitude: 41.8781, longitude: -87.6298)
@@ -538,6 +556,40 @@ struct TripPlannerFoundationTests {
         #expect(persistedPlan.title == "Lisbon food weekend")
         #expect(persistedTrip.itineraryItems.map(\.name) == ["Arrival", "Brunch", "Dinner"])
         #expect(persistedTrip.itineraryItems[1].searchableDestination(in: persistedTrip) == "Brunch, Search by area, Lisbon")
+    }
+
+    @MainActor
+    @Test("Reviewed plan save keeps one departure event", .bug("https://github.com/heathdj/TripPlanner/issues/8"))
+    func reviewedPlanSaveKeepsOneDepartureEvent() throws {
+        let storeURL = temporaryStoreURL()
+        try removeStore(at: storeURL)
+        defer { try? removeStore(at: storeURL) }
+
+        let container = try makeContainer(at: storeURL)
+        let context = ModelContext(container)
+        let trip = Trip(
+            title: "Departure",
+            location: "Test",
+            windowStartDate: date(year: 2026, month: 11, day: 1),
+            windowEndDate: date(year: 2026, month: 11, day: 4),
+            durationDays: 4
+        )
+        context.insert(trip)
+
+        _ = try ReviewedTripPlanStore.saveReviewedPlan(
+            title: "Reviewed",
+            overview: "Overview",
+            items: [
+                ItineraryItem(name: "Departure", category: .transit, dayNumber: 1),
+                ItineraryItem(name: "Departure Event", category: .transit, dayNumber: 4),
+                ItineraryItem(name: "Dinner", category: .food, dayNumber: 2)
+            ],
+            for: trip,
+            in: context
+        )
+
+        #expect(trip.itineraryItems.filter(\.isDepartureEvent).map(\.name) == ["Departure Event"])
+        #expect(trip.itineraryItems.map(\.name) == ["Dinner", "Departure Event"])
     }
 
     @MainActor

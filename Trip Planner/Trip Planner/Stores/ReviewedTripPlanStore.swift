@@ -17,8 +17,8 @@ enum ReviewedTripPlanStore {
     }
 
     static func reviewedItems(from items: [ItineraryItem]) -> [ItineraryItem] {
-        items
-            .compactMap { item in
+        let reviewedItems = items
+            .compactMap { item -> ItineraryItem? in
                 let name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard name.isEmpty == false else { return nil }
 
@@ -32,13 +32,34 @@ enum ReviewedTripPlanStore {
                     longitude: item.longitude
                 )
             }
+
+        return removingDuplicateDepartureItems(from: reviewedItems)
             .sorted { lhs, rhs in
                 if lhs.dayNumber == rhs.dayNumber {
                     return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
                 }
 
-                return lhs.dayNumber < rhs.dayNumber
-            }
+            return lhs.dayNumber < rhs.dayNumber
+        }
+    }
+
+    static func removingDuplicateDepartureItems(from items: [ItineraryItem]) -> [ItineraryItem] {
+        let departureItems = items.filter(\.isDepartureEvent)
+        guard departureItems.count > 1,
+              let keptDepartureID = departureItems.max(by: { lhs, rhs in
+                  if lhs.dayNumber == rhs.dayNumber {
+                      return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+                  }
+
+                  return lhs.dayNumber < rhs.dayNumber
+              })?.id
+        else {
+            return items
+        }
+
+        return items.filter { item in
+            item.isDepartureEvent == false || item.id == keptDepartureID
+        }
     }
 
     @MainActor

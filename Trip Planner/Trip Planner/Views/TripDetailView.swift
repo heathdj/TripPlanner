@@ -593,6 +593,7 @@ private struct GeneratedPlanReviewSheet: View {
     let savePlan: (EditableTripPlan) throws -> Void
 
     @State private var saveErrorMessage: String?
+    @State private var pendingItem: EditableItineraryItem?
 
     private var isShowingSaveError: Binding<Bool> {
         Binding {
@@ -625,11 +626,31 @@ private struct GeneratedPlanReviewSheet: View {
                                 deleteItem(id: item.id)
                             }
                         )
+                        .swipeActions(edge: .trailing) {
+                            Button("Delete", systemImage: "trash", role: .destructive) {
+                                deleteItem(id: item.id)
+                            }
+                        }
+                    }
+
+                    if let pendingItemBinding {
+                        EditableItineraryItemSection(
+                            trip: trip,
+                            item: pendingItemBinding,
+                            confirmItem: confirmPendingItem,
+                            deleteItem: cancelPendingItem
+                        )
+                        .swipeActions(edge: .trailing) {
+                            Button("Discard", systemImage: "trash", role: .destructive) {
+                                cancelPendingItem()
+                            }
+                        }
                     }
 
                     Button("Add Item", systemImage: "plus") {
                         addItem()
                     }
+                    .disabled(pendingItem != nil)
                 } header: {
                     Text("Items")
                 } footer: {
@@ -660,20 +681,44 @@ private struct GeneratedPlanReviewSheet: View {
         }
     }
 
+    private var pendingItemBinding: Binding<EditableItineraryItem>? {
+        guard pendingItem != nil else { return nil }
+
+        return Binding {
+            pendingItem ?? EditableItineraryItem()
+        } set: { newValue in
+            pendingItem = newValue
+        }
+    }
+
     private func addItem() {
-        let nextDay = min(max(1, plan.items.last?.dayNumber ?? 1), trip.durationDays)
-        plan.items.append(
+        let nextDay = min(max(1, plan.items.last?.dayNumber ?? pendingItem?.dayNumber ?? 1), trip.durationDays)
+        pendingItem =
             EditableItineraryItem(
                 name: "",
                 notesOrAddress: "",
                 category: .activity,
                 dayNumber: nextDay
             )
-        )
     }
 
     private func deleteItem(id: UUID) {
         plan.items.removeAll { $0.id == id }
+    }
+
+    private func confirmPendingItem() {
+        guard let pendingItem,
+              pendingItem.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        else {
+            return
+        }
+
+        plan.items.append(pendingItem)
+        self.pendingItem = nil
+    }
+
+    private func cancelPendingItem() {
+        pendingItem = nil
     }
 
     private func save() {
@@ -691,7 +736,12 @@ private struct GeneratedPlanReviewSheet: View {
 private struct EditableItineraryItemSection: View {
     let trip: Trip
     @Binding var item: EditableItineraryItem
+    var confirmItem: (() -> Void)?
     let deleteItem: () -> Void
+
+    private var canConfirm: Bool {
+        item.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -701,10 +751,23 @@ private struct EditableItineraryItemSection: View {
 
                 Spacer()
 
+                if let confirmItem {
+                    Button("Confirm", systemImage: "checkmark.circle.fill") {
+                        confirmItem()
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.green)
+                    .disabled(canConfirm == false)
+                    .accessibilityLabel("Confirm item")
+                    .accessibilityHint("Adds this item to the reviewed plan")
+                }
+
                 Button("Delete", systemImage: "trash", role: .destructive) {
                     deleteItem()
                 }
                 .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
                 .accessibilityLabel("Delete \(item.name.isEmpty ? "item" : item.name)")
             }
 

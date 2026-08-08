@@ -269,7 +269,7 @@ enum TripPlanGenerationSanitizer {
         durationDays: Int
     ) -> TripPlanDraft {
         let duration = max(1, durationDays)
-        let items = itemInputs
+        let generatedItems = itemInputs
             .map { item in
                 ItineraryItem(
                     name: clean(item.name, fallback: "Trip idea"),
@@ -278,6 +278,8 @@ enum TripPlanGenerationSanitizer {
                     dayNumber: min(max(1, item.dayNumber), duration)
                 )
             }
+
+        let items = ReviewedTripPlanStore.removingDuplicateDepartureItems(from: generatedItems)
             .sorted { lhs, rhs in
                 if lhs.dayNumber == rhs.dayNumber {
                     return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
