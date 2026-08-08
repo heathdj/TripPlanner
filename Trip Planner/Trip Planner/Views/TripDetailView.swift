@@ -57,6 +57,7 @@ struct TripDetailView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         DetailHero(trip: trip, distanceSummary: distanceSummary)
                         TripFactsGrid(trip: trip, distanceSummary: distanceSummary)
+                        LifecycleSection(trip: trip, saveTripChanges: saveTripChanges)
                         SavedPlanSection(plan: savedPlan)
                         GeneratedPlanSection(
                             status: tripPlanGenerator.status,
@@ -179,7 +180,7 @@ struct TripDetailView: View {
             for: trip,
             in: modelContext
         )
-        trip.status = .open
+        TripLifecycleService.normalizeMigratedLifecycle(for: trip)
         trip.updatedAt = .now
         generatedDraft = nil
         hasSavedReviewedPlan = true
@@ -188,7 +189,7 @@ struct TripDetailView: View {
     private func saveGeneratedTrip() {
         guard canSaveGeneratedTrip else { return }
 
-        trip.status = .open
+        TripLifecycleService.normalizeMigratedLifecycle(for: trip)
         trip.updatedAt = .now
 
         do {
@@ -198,6 +199,10 @@ struct TripDetailView: View {
         } catch {
             generationMessage = "Trip Planner could not save this trip. Try saving again."
         }
+    }
+
+    private func saveTripChanges() throws {
+        try modelContext.save()
     }
 
     private func cancelGeneratedTrip() {
@@ -348,6 +353,7 @@ private struct TripFactsGrid: View {
     private var facts: [TripFact] {
         var values = [
             TripFact(title: "Travel window", value: trip.windowDisplayString, systemImage: "calendar"),
+            TripFact(title: "Exact dates", value: trip.exactDateDisplayString, systemImage: "calendar.badge.checkmark"),
             TripFact(title: "Trip duration", value: trip.durationDisplayString, systemImage: "clock"),
             TripFact(title: "Travelers", value: trip.travelerDisplayString, systemImage: "person.2.fill"),
             TripFact(title: "Starts", value: trip.startDateDisplayString, systemImage: "arrow.triangle.branch")
@@ -404,6 +410,239 @@ private struct TripFact: Identifiable {
 
     var id: String {
         title
+    }
+}
+
+private struct LifecycleSection: View {
+    let trip: Trip
+    let saveTripChanges: () throws -> Void
+
+    @State private var exactStartDate: Date
+    @State private var errorMessage: String?
+    @State private var pendingAction: LifecycleConfirmation?
+
+    init(trip: Trip, saveTripChanges: @escaping () throws -> Void) {
+        self.trip = trip
+        self.saveTripChanges = saveTripChanges
+        _exactStartDate = State(initialValue: trip.exactStartDate ?? trip.windowStartDate)
+    }
+
+    private var canEditSchedule: Bool {
+        trip.status == .open || trip.status == .planned
+    }
+
+    private var scheduleValidationMessage: String? {
+        guard canEditSchedule else { return nil }
+
+        do {
+            _ = try TripLifecycleService.previewExactEndDate(for: trip, exactStartDate: exactStartDate)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    private var isShowingError: Binding<Bool> {
+        Binding {
+            errorMessage != nil
+        } set: { isPresented in
+            if isPresented == false {
+                errorMessage = nil
+            }
+        }
+    }
+
+    var body: some View {
+        GlassPanel {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Trip Lifecycle")
+                    .font(.headline)
+                    .fontDesign(.rounded)
+
+                Label(statusSummary, systemImage: trip.status.systemImage)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if canEditSchedule {
+                    DatePicker("Exact start", selection: $exactStartDate, in: trip.windowStartDate...trip.windowEndDate, displayedComponents: .date)
+
+                    if let scheduleValidationMessage {
+                        Label(scheduleValidationMessage, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+
+                    HStack {
+                        Button(trip.status == .planned ? "Update Start" : "Plan Trip", systemImage: "calendar.badge.checkmark") {
+                            setExactStartDate()
+                        }
+                        .buttonStyle(.glassProminent)
+                        .disabled(scheduleValidationMessage != nil)
+
+                        if trip.status == .planned {
+                            Button("Clear Date", systemImage: "calendar.badge.minus") {
+                                clearExactStartDate()
+                            }
+                            .buttonStyle(.glass)
+                        }
+                    }
+                }
+
+                if trip.status != .closed {
+                    HStack {
+                        if trip.status == .open || trip.status == .planned {
+                            Button("Start", systemImage: "play.fill") {
+                                pendingAction = .activate
+                            }
+                            .buttonStyle(.glass)
+                        }
+
+                        Button("Complete", systemImage: "checkmark.circle.fill") {
+                            pendingAction = .complete
+                        }
+                        .buttonStyle(.glass)
+
+                        Button("Cancel", systemImage: "xmark.circle.fill", role: .destructive) {
+                            pendingAction = .cancel
+                        }
+                        .buttonStyle(.glass)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .onChange(of: trip.exactStartDate) {
+            exactStartDate = trip.exactStartDate ?? trip.windowStartDate
+        }
+        .confirmationDialog(
+            pendingAction?.title ?? "Update Trip",
+            isPresented: Binding {
+                pendingAction != nil
+            } set: { isPresented in
+                if isPresented == false {
+                    pendingAction = nil
+                }
+            },
+            titleVisibility: .visible
+        ) {
+            if let pendingAction {
+                Button(pendingAction.confirmButtonTitle, role: pendingAction.role) {
+                    perform(pendingAction)
+                }
+            }
+
+            Button("Keep Editing", role: .cancel) { }
+        } message: {
+            Text(pendingAction?.message ?? "")
+        }
+        .alert("Trip Not Updated", isPresented: isShowingError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(errorMessage ?? "Review the trip and try again.")
+        }
+    }
+
+    private var statusSummary: String {
+        switch trip.status {
+        case .open:
+            return "Open trips stay flexible until you choose an exact start date or start the trip."
+        case .planned:
+            return "Planned for \(trip.exactDateDisplayString)."
+        case .active:
+            if let activatedAt = trip.activatedAt {
+                return "Active since \(activatedAt.formatted(date: .abbreviated, time: .shortened))."
+            }
+            return "This trip is active."
+        case .closed:
+            let outcome = trip.effectiveClosedOutcome?.rawValue ?? ClosedTripOutcome.completed.rawValue
+            if let closedAt = trip.closedAt {
+                return "\(outcome) on \(closedAt.formatted(date: .abbreviated, time: .shortened))."
+            }
+            return outcome
+        }
+    }
+
+    private func setExactStartDate() {
+        do {
+            _ = try TripLifecycleService.setExactStartDate(exactStartDate, for: trip)
+            try saveTripChanges()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func clearExactStartDate() {
+        do {
+            try TripLifecycleService.clearExactStartDate(for: trip)
+            try saveTripChanges()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func perform(_ action: LifecycleConfirmation) {
+        do {
+            switch action {
+            case .activate:
+                try TripLifecycleService.activate(trip)
+            case .complete:
+                try TripLifecycleService.close(trip, outcome: .completed)
+            case .cancel:
+                try TripLifecycleService.close(trip, outcome: .cancelled)
+            }
+
+            try saveTripChanges()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private enum LifecycleConfirmation: String, Identifiable {
+    case activate
+    case complete
+    case cancel
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .activate:
+            return "Start Trip?"
+        case .complete:
+            return "Complete Trip?"
+        case .cancel:
+            return "Cancel Trip?"
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .activate:
+            return "This moves the trip into Active Trips. You can have more than one active trip."
+        case .complete:
+            return "This closes the trip and marks the outcome as completed."
+        case .cancel:
+            return "This closes the trip and marks the outcome as cancelled."
+        }
+    }
+
+    var confirmButtonTitle: String {
+        switch self {
+        case .activate:
+            return "Start Trip"
+        case .complete:
+            return "Complete Trip"
+        case .cancel:
+            return "Cancel Trip"
+        }
+    }
+
+    var role: ButtonRole? {
+        self == .cancel ? .destructive : nil
     }
 }
 

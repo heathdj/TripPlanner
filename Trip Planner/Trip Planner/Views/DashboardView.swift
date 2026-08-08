@@ -41,8 +41,16 @@ struct DashboardView: View {
         tripGroups.closedTrips
     }
 
-    private var openTripCount: Int {
-        trips.filter { $0.status == .open }.count
+    private var activeTrips: [Trip] {
+        tripGroups.activeTrips
+    }
+
+    private var plannedTrips: [Trip] {
+        tripGroups.plannedTrips
+    }
+
+    private var currentTripCount: Int {
+        trips.filter { $0.status != .closed }.count
     }
 
     private var plannedItemTotal: Int {
@@ -60,8 +68,8 @@ struct DashboardView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         HeroPanel(
-                            nextTrip: tripGroups.nearbyTrips.first?.trip ?? openTrips.first,
-                            openTripCount: openTripCount,
+                            nextTrip: tripGroups.nearbyTrips.first?.trip ?? activeTrips.first ?? plannedTrips.first ?? openTrips.first,
+                            currentTripCount: currentTripCount,
                             plannedItemTotal: plannedItemTotal
                         )
 
@@ -78,8 +86,24 @@ struct DashboardView: View {
                         )
 
                         TripSection(
-                            title: "Open Trips",
-                            emptyTitle: "No open trips",
+                            title: "Active Trips",
+                            emptyTitle: "No active trips",
+                            trips: activeTrips,
+                            columns: columns,
+                            selectTrip: selectTrip
+                        )
+
+                        TripSection(
+                            title: "Planned Trips",
+                            emptyTitle: "No planned trips",
+                            trips: plannedTrips,
+                            columns: columns,
+                            selectTrip: selectTrip
+                        )
+
+                        TripSection(
+                            title: "Flexible Ideas",
+                            emptyTitle: "No flexible trip ideas",
                             trips: openTrips,
                             columns: columns,
                             selectTrip: selectTrip
@@ -130,6 +154,7 @@ struct DashboardView: View {
             )
         }
         .task {
+            normalizeMigratedLifecycles()
             locationService.requestAccessOrRefreshLocation()
         }
     }
@@ -160,7 +185,7 @@ struct DashboardView: View {
 
         let fetchedTrips = (try? modelContext.fetch(descriptor)) ?? []
         let savedTrip = fetchedTrips.first ?? trip
-        savedTrip.status = .open
+        TripLifecycleService.normalizeMigratedLifecycle(for: savedTrip)
         savedTrip.updatedAt = .now
         savedTrip.itineraryItems = TripStore.sortedItineraryItems(savedTrip.itineraryItems)
         savedTrip.updateProgress(completedItems: 0, plannedItems: savedTrip.itineraryItems.count)
@@ -171,6 +196,11 @@ struct DashboardView: View {
 
         try? modelContext.save()
         presentedTrip = nil
+    }
+
+    private func normalizeMigratedLifecycles() {
+        trips.forEach { TripLifecycleService.normalizeMigratedLifecycle(for: $0) }
+        try? modelContext.save()
     }
 
     private func openPendingCreatedTrip() {
@@ -201,7 +231,7 @@ private struct PresentedTrip: Identifiable {
 
 private struct HeroPanel: View {
     let nextTrip: Trip?
-    let openTripCount: Int
+    let currentTripCount: Int
     let plannedItemTotal: Int
 
     var body: some View {
@@ -226,8 +256,8 @@ private struct HeroPanel: View {
 
                     HStack(spacing: 12) {
                         StatPill(
-                            title: "Open Trips",
-                            value: "\(openTripCount)",
+                            title: "Current Trips",
+                            value: "\(currentTripCount)",
                             systemImage: "suitcase.rolling.fill"
                         )
 
@@ -336,7 +366,7 @@ private struct NearYouSection: View {
         }
 
         if canUseLocation {
-            return hasCurrentLocation ? "No nearby open trips" : "Finding nearby trips"
+            return hasCurrentLocation ? "No nearby current trips" : "Finding nearby trips"
         }
 
         return "Find trips near you"
@@ -344,18 +374,18 @@ private struct NearYouSection: View {
 
     private var statusMessage: String {
         if isDeniedOrRestricted {
-            return "Trip Planner can still show Open and Closed trips. Enable location access in Settings to promote nearby open trips here."
+            return "Trip Planner can still show your trips by lifecycle state. Enable location access in Settings to promote nearby current trips here."
         }
 
         if canUseLocation {
             if hasCurrentLocation {
-                return "Open trips outside your Near You distance stay in the Open Trips section."
+                return "Current trips outside your Near You distance stay in their lifecycle sections."
             }
 
-            return "Trip Planner has location access while you use the app and is checking for nearby open trips."
+            return "Trip Planner has location access while you use the app and is checking for nearby current trips."
         }
 
-        return "Use your current location to promote nearby open trips into this section."
+        return "Use your current location to promote nearby current trips into this section."
     }
 
     private var statusIcon: String {

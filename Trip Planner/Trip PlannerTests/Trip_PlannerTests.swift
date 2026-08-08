@@ -221,6 +221,96 @@ struct TripPlannerFoundationTests {
     }
 
     @MainActor
+    @Test("Exact start date plans a flexible trip", .bug("https://github.com/heathdj/TripPlanner/issues/49"))
+    func exactStartDatePlansFlexibleTrip() throws {
+        let trip = trip(title: "Plan me", startDay: 1, endDay: 10, status: .open)
+        let exactEndDate = try TripLifecycleService.setExactStartDate(
+            localDate(year: 2026, month: 5, day: 3),
+            for: trip
+        )
+
+        #expect(trip.status == .planned)
+        #expect(trip.exactStartDate == localDate(year: 2026, month: 5, day: 3))
+        #expect(exactEndDate == localDate(year: 2026, month: 5, day: 4))
+        #expect(trip.exactEndDate == localDate(year: 2026, month: 5, day: 4))
+        #expect(trip.summary().startDateSummary == trip.exactDateDisplayString)
+    }
+
+    @MainActor
+    @Test("Exact start date must fit inside the flexible window", .bug("https://github.com/heathdj/TripPlanner/issues/49"))
+    func exactStartDateMustFitInsideFlexibleWindow() {
+        let outsideWindowTrip = trip(title: "Outside window", startDay: 1, endDay: 4, status: .open)
+        let tooLateTrip = trip(title: "Too late", startDay: 1, endDay: 4, status: .open)
+        tooLateTrip.updateDuration(days: 3)
+
+        #expect(throws: TripLifecycleService.ValidationError.startDateOutsideWindow) {
+            try TripLifecycleService.setExactStartDate(localDate(year: 2026, month: 4, day: 29), for: outsideWindowTrip)
+        }
+
+        #expect(throws: TripLifecycleService.ValidationError.tripDoesNotFitWindow) {
+            try TripLifecycleService.setExactStartDate(localDate(year: 2026, month: 5, day: 3), for: tooLateTrip)
+        }
+
+        #expect(outsideWindowTrip.status == .open)
+        #expect(outsideWindowTrip.exactStartDate == nil)
+        #expect(tooLateTrip.status == .open)
+        #expect(tooLateTrip.exactStartDate == nil)
+    }
+
+    @MainActor
+    @Test("Clearing an exact date moves planned trips back to open", .bug("https://github.com/heathdj/TripPlanner/issues/49"))
+    func clearingExactDateMovesPlannedTripBackToOpen() throws {
+        let trip = trip(title: "Flexible again", startDay: 1, endDay: 8, status: .open)
+        try TripLifecycleService.setExactStartDate(localDate(year: 2026, month: 5, day: 2), for: trip)
+
+        try TripLifecycleService.clearExactStartDate(for: trip)
+
+        #expect(trip.status == .open)
+        #expect(trip.exactStartDate == nil)
+    }
+
+    @MainActor
+    @Test("Active and closed transitions require explicit service calls", .bug("https://github.com/heathdj/TripPlanner/issues/49"))
+    func activeAndClosedTransitionsRequireExplicitServiceCalls() throws {
+        let activeTrip = trip(title: "Active one", startDay: 1, endDay: 8, status: .open)
+        let secondActiveTrip = trip(title: "Active two", startDay: 3, endDay: 10, status: .open)
+        let activationDate = localDate(year: 2026, month: 5, day: 1)
+        let closeDate = localDate(year: 2026, month: 5, day: 6)
+
+        try TripLifecycleService.activate(activeTrip, at: activationDate)
+        try TripLifecycleService.activate(secondActiveTrip, at: activationDate)
+        try TripLifecycleService.close(activeTrip, outcome: .cancelled, at: closeDate)
+
+        #expect(activeTrip.status == .closed)
+        #expect(activeTrip.activatedAt == activationDate)
+        #expect(activeTrip.closedAt == closeDate)
+        #expect(activeTrip.closedOutcome == .cancelled)
+        #expect(activeTrip.effectiveClosedOutcome == .cancelled)
+        #expect(secondActiveTrip.status == .active)
+        #expect(throws: TripLifecycleService.ValidationError.cannotActivate) {
+            try TripLifecycleService.activate(activeTrip)
+        }
+    }
+
+    @MainActor
+    @Test("Migrated lifecycle values are normalized safely", .bug("https://github.com/heathdj/TripPlanner/issues/49"))
+    func migratedLifecycleValuesAreNormalizedSafely() {
+        let migratedPlanned = trip(title: "Migrated planned", startDay: 1, endDay: 8, status: .open)
+        migratedPlanned.exactStartDate = localDate(year: 2026, month: 5, day: 2)
+        let migratedOpen = trip(title: "Migrated open", startDay: 1, endDay: 8, status: .planned)
+        let migratedClosed = trip(title: "Migrated closed", startDay: 1, endDay: 8, status: .closed)
+
+        TripLifecycleService.normalizeMigratedLifecycle(for: migratedPlanned)
+        TripLifecycleService.normalizeMigratedLifecycle(for: migratedOpen)
+        TripLifecycleService.normalizeMigratedLifecycle(for: migratedClosed)
+
+        #expect(migratedPlanned.status == .planned)
+        #expect(migratedOpen.status == .open)
+        #expect(migratedClosed.status == .closed)
+        #expect(migratedClosed.closedOutcome == .completed)
+    }
+
+    @MainActor
     @Test("Travel settings default duration and window length", .bug("https://github.com/heathdj/TripPlanner/issues/2"))
     func travelSettingsDefaultsMatchIssueRequirements() {
         let settings = TravelSettings()
@@ -341,8 +431,8 @@ struct TripPlannerFoundationTests {
     }
 
     @MainActor
-    @Test("Nearby grouping promotes only open trips inside the radius", .bug("https://github.com/heathdj/TripPlanner/issues/3"))
-    func nearbyGroupingPromotesOpenTripsInsideRadius() {
+    @Test("Nearby grouping promotes current trips inside the radius", .bug("https://github.com/heathdj/TripPlanner/issues/49"))
+    func nearbyGroupingPromotesCurrentTripsInsideRadius() throws {
         let userLocation = CLLocation(latitude: 41.8781, longitude: -87.6298)
         let nearbyOpen = trip(
             title: "Nearby",
@@ -360,6 +450,24 @@ struct TripPlannerFoundationTests {
             latitude: 40.7128,
             longitude: -74.0060
         )
+        let nearbyPlanned = trip(
+            title: "Nearby Planned",
+            startDay: 7,
+            endDay: 12,
+            status: .open,
+            latitude: 41.8818,
+            longitude: -87.6231
+        )
+        try TripLifecycleService.setExactStartDate(localDate(year: 2026, month: 5, day: 8), for: nearbyPlanned)
+        let nearbyActive = trip(
+            title: "Nearby Active",
+            startDay: 10,
+            endDay: 15,
+            status: .open,
+            latitude: 41.8818,
+            longitude: -87.6231
+        )
+        try TripLifecycleService.activate(nearbyActive, at: localDate(year: 2026, month: 5, day: 10))
         let nearbyClosed = trip(
             title: "Closed nearby",
             startDay: 5,
@@ -370,19 +478,21 @@ struct TripPlannerFoundationTests {
         )
 
         let groups = TripStore.groupedTrips(
-            [farOpen, nearbyClosed, nearbyOpen],
+            [farOpen, nearbyClosed, nearbyPlanned, nearbyActive, nearbyOpen],
             userLocation: userLocation,
             nearYouDistanceKilometers: 100
         )
 
-        #expect(groups.nearbyTrips.map(\.trip.title) == ["Nearby"])
+        #expect(groups.nearbyTrips.map(\.trip.title) == ["Nearby", "Nearby Active", "Nearby Planned"])
         #expect(groups.openTrips.map(\.title) == ["Far"])
+        #expect(groups.plannedTrips.isEmpty)
+        #expect(groups.activeTrips.isEmpty)
         #expect(groups.closedTrips.map(\.title) == ["Closed nearby"])
     }
 
     @MainActor
-    @Test("Grouping without location keeps open and closed trips visible", .bug("https://github.com/heathdj/TripPlanner/issues/3"))
-    func groupingWithoutLocationKeepsOpenAndClosedTripsVisible() {
+    @Test("Grouping without location keeps lifecycle sections visible", .bug("https://github.com/heathdj/TripPlanner/issues/49"))
+    func groupingWithoutLocationKeepsLifecycleSectionsVisible() throws {
         let open = trip(
             title: "Open",
             startDay: 1,
@@ -391,16 +501,22 @@ struct TripPlannerFoundationTests {
             latitude: 41.8818,
             longitude: -87.6231
         )
+        let planned = trip(title: "Planned", startDay: 5, endDay: 8, status: .open)
+        try TripLifecycleService.setExactStartDate(localDate(year: 2026, month: 5, day: 5), for: planned)
+        let active = trip(title: "Active", startDay: 9, endDay: 12, status: .open)
+        try TripLifecycleService.activate(active, at: localDate(year: 2026, month: 5, day: 9))
         let closed = trip(title: "Closed", startDay: 3, endDay: 4, status: .closed)
 
         let groups = TripStore.groupedTrips(
-            [closed, open],
+            [closed, active, planned, open],
             userLocation: nil,
             nearYouDistanceKilometers: 100
         )
 
         #expect(groups.nearbyTrips.isEmpty)
         #expect(groups.openTrips.map(\.title) == ["Open"])
+        #expect(groups.plannedTrips.map(\.title) == ["Planned"])
+        #expect(groups.activeTrips.map(\.title) == ["Active"])
         #expect(groups.closedTrips.map(\.title) == ["Closed"])
     }
 
@@ -419,7 +535,7 @@ struct TripPlannerFoundationTests {
             windowStartDate: date(year: 2026, month: 3, day: 1),
             windowEndDate: date(year: 2026, month: 3, day: 15),
             durationDays: 4,
-            status: .open,
+            status: .closed,
             highlight: "Local food and museum mornings.",
             plannedItemCount: 6,
             completedItemCount: 2,
@@ -427,7 +543,11 @@ struct TripPlannerFoundationTests {
             itineraryItems: [
                 ItineraryItem(name: "Museum morning", category: .activity, dayNumber: 1),
                 ItineraryItem(name: "Dinner reservation", category: .food, dayNumber: 2)
-            ]
+            ],
+            exactStartDate: localDate(year: 2026, month: 3, day: 5),
+            activatedAt: localDate(year: 2026, month: 3, day: 5),
+            closedAt: localDate(year: 2026, month: 3, day: 9),
+            closedOutcome: .completed
         )
         let settings = TravelSettings(defaultDurationDays: 14, defaultWindowLengthDays: 45)
         let reviewedPlan = ReviewedTripPlan(
@@ -455,6 +575,12 @@ struct TripPlannerFoundationTests {
         #expect(persistedTrip.windowLengthDays == 15)
         #expect(persistedTrip.durationDays == 4)
         #expect(persistedTrip.validStartDateCount == 12)
+        #expect(persistedTrip.status == .closed)
+        #expect(persistedTrip.exactStartDate == localDate(year: 2026, month: 3, day: 5))
+        #expect(persistedTrip.exactEndDate == localDate(year: 2026, month: 3, day: 8))
+        #expect(persistedTrip.activatedAt == localDate(year: 2026, month: 3, day: 5))
+        #expect(persistedTrip.closedAt == localDate(year: 2026, month: 3, day: 9))
+        #expect(persistedTrip.closedOutcome == .completed)
         #expect(persistedTrip.completedItemCount == 2)
         #expect(persistedTrip.travelerDisplayString == "3 travelers")
         #expect(persistedTrip.itineraryItems.map(\.name) == ["Museum morning", "Dinner reservation"])
@@ -826,6 +952,10 @@ struct TripPlannerFoundationTests {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         return calendar.date(from: DateComponents(year: year, month: month, day: day)) ?? .now
+    }
+
+    private func localDate(year: Int, month: Int, day: Int) -> Date {
+        Calendar.current.date(from: DateComponents(year: year, month: month, day: day)) ?? .now
     }
 
     private func makeContainer(at storeURL: URL) throws -> ModelContainer {

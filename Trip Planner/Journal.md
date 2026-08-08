@@ -173,6 +173,14 @@ The key rule is source tags. Provider values and manual values wear different ba
 
 Follow-up: generated plans now visit the place-details desk before the traveler reviews them. The model still drafts the ideas, but MapKit gets a chance to attach real provider facts first. If a generated stop cannot be resolved, it stays editable instead of blocking the sheet.
 
+### 2026-08-08: Issue #49 Gives Trips a Real Lifecycle
+
+Issue `#49` replaced the old open/closed light switch with a travel-sized state machine: open ideas, planned trips with exact dates, active trips that are happening now, and closed trips that remember whether they completed or were cancelled.
+
+The trick was keeping flexibility and commitment separate. The flexible window is still the planning sandbox, while an exact start date is an optional stake in the ground. The lifecycle service is the gate agent: it checks that a trip fits inside the window, moves planned trips back to open when the exact date is cleared, and requires explicit actions before anything becomes active or closed.
+
+Migration stayed boring on purpose. New SwiftData fields are optional so existing stores do not need Core Data to invent mandatory values. Old closed trips normalize to `completed`, and open trips with an exact date normalize to `planned`. It is not glamorous, but after the previous migration scar tissue, boring persistence is the victory lap.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.
