@@ -8,6 +8,9 @@ struct ItineraryItem: Codable, Hashable, Identifiable, Sendable {
     var dayNumber: Int
     var latitude: Double?
     var longitude: Double?
+    var mapItemIdentifier: String?
+    var phoneNumber: String?
+    var pointOfInterestCategoryName: String?
 
     init(
         id: UUID = UUID(),
@@ -16,7 +19,10 @@ struct ItineraryItem: Codable, Hashable, Identifiable, Sendable {
         category: ItineraryItemCategory,
         dayNumber: Int,
         latitude: Double? = nil,
-        longitude: Double? = nil
+        longitude: Double? = nil,
+        mapItemIdentifier: String? = nil,
+        phoneNumber: String? = nil,
+        pointOfInterestCategoryName: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -25,6 +31,9 @@ struct ItineraryItem: Codable, Hashable, Identifiable, Sendable {
         self.dayNumber = max(1, dayNumber)
         self.latitude = latitude
         self.longitude = longitude
+        self.mapItemIdentifier = mapItemIdentifier
+        self.phoneNumber = phoneNumber
+        self.pointOfInterestCategoryName = pointOfInterestCategoryName
     }
 
     var hasCoordinate: Bool {

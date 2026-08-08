@@ -29,7 +29,10 @@ enum ReviewedTripPlanStore {
                     category: item.category,
                     dayNumber: item.dayNumber,
                     latitude: item.latitude,
-                    longitude: item.longitude
+                    longitude: item.longitude,
+                    mapItemIdentifier: item.mapItemIdentifier,
+                    phoneNumber: item.phoneNumber,
+                    pointOfInterestCategoryName: item.pointOfInterestCategoryName
                 )
             }
 
