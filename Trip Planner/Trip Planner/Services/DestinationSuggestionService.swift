@@ -90,6 +90,8 @@ final class DestinationSuggestionService: NSObject {
 final class ActivityPlaceSearchService: NSObject {
     private let completer: MKLocalSearchCompleter
     private let destination: String
+    private let searchCenter: CLLocation?
+    private let searchRadiusMeters: CLLocationDistance
     private let searchRegion: MKCoordinateRegion?
 
     var suggestions: [ActivityPlaceSuggestion] = []
@@ -99,25 +101,30 @@ final class ActivityPlaceSearchService: NSObject {
     init(
         destination: String,
         destinationCoordinate: CLLocationCoordinate2D? = nil,
-        userLocation: CLLocation? = nil
+        userLocation: CLLocation? = nil,
+        nearYouDistanceKilometers: Double = TravelSettings.defaultNearYouDistanceKilometers
     ) {
         let completer = MKLocalSearchCompleter()
         self.completer = completer
         self.destination = destination.trimmingCharacters(in: .whitespacesAndNewlines)
+        searchRadiusMeters = max(1, nearYouDistanceKilometers) * 1_000
 
-        if let destinationCoordinate {
-            searchRegion = MKCoordinateRegion(
-                center: destinationCoordinate,
-                latitudinalMeters: 150_000,
-                longitudinalMeters: 150_000
-            )
-        } else if let userLocation {
+        if let userLocation {
+            searchCenter = userLocation
             searchRegion = MKCoordinateRegion(
                 center: userLocation.coordinate,
-                latitudinalMeters: 300_000,
-                longitudinalMeters: 300_000
+                latitudinalMeters: searchRadiusMeters * 2,
+                longitudinalMeters: searchRadiusMeters * 2
+            )
+        } else if let destinationCoordinate {
+            searchCenter = CLLocation(latitude: destinationCoordinate.latitude, longitude: destinationCoordinate.longitude)
+            searchRegion = MKCoordinateRegion(
+                center: destinationCoordinate,
+                latitudinalMeters: searchRadiusMeters * 2,
+                longitudinalMeters: searchRadiusMeters * 2
             )
         } else {
+            searchCenter = nil
             searchRegion = nil
         }
 
@@ -127,7 +134,7 @@ final class ActivityPlaceSearchService: NSObject {
 
         if let searchRegion {
             completer.region = searchRegion
-            completer.regionPriority = .default
+            completer.regionPriority = .required
         }
     }
 
@@ -172,11 +179,12 @@ final class ActivityPlaceSearchService: NSObject {
 
         if let searchRegion {
             request.region = searchRegion
+            request.regionPriority = .required
         }
 
         do {
             let response = try await MKLocalSearch(request: request).start()
-            guard let mapItem = response.mapItems.first else {
+            guard let mapItem = response.mapItems.first(where: isInsideSearchRadius) else {
                 errorMessage = "No matching place found. You can still enter the item manually."
                 return nil
             }
@@ -196,6 +204,14 @@ final class ActivityPlaceSearchService: NSObject {
         }
 
         return "\(query), \(destination)"
+    }
+
+    private func isInsideSearchRadius(_ mapItem: MKMapItem) -> Bool {
+        guard let searchCenter else {
+            return true
+        }
+
+        return mapItem.location.distance(from: searchCenter) <= searchRadiusMeters
     }
 
     private static func suggestion(from mapItem: MKMapItem) -> ActivityPlaceSuggestion {

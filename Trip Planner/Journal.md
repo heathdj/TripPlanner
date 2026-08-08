@@ -163,6 +163,8 @@ Issue `#45` moves manual itinerary editing from "type whatever you remember" tow
 
 The architecture lesson is to save facts, not framework objects. `MKMapItem` is useful while searching, but the app stores small durable values on `ItineraryItem`: coordinates for directions, a formatted address for humans, and optional metadata for richer future features. That keeps SwiftData persistence boring, which is exactly what persistence should be.
 
+Follow-up bug: MapKit's region can be a polite suggestion instead of a locked door. Activity search originally biased results near the traveler, but it could still offer places on another continent. The fix was to use the same Near You radius from Settings, make MapKit's region priority required, and filter resolved map items by actual distance from the current location when available.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

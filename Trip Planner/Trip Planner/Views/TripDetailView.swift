@@ -19,6 +19,7 @@ struct TripDetailView: View {
     let trip: Trip
     var distanceSummary: String?
     var userLocation: CLLocation?
+    var nearYouDistanceKilometers = TravelSettings.defaultNearYouDistanceKilometers
     var startsGeneratingDraftOnAppear = false
     var tripPlanGenerator: any TripPlanGenerating = FoundationModelsTripPlanGenerator()
     var generatedTripSaved: (Trip) -> Void = { _ in }
@@ -116,6 +117,7 @@ struct TripDetailView: View {
                     trip: trip,
                     plan: $editablePlan,
                     userLocation: userLocation,
+                    nearYouDistanceKilometers: nearYouDistanceKilometers,
                     savePlan: saveReviewedPlan
                 )
             }
@@ -681,6 +683,7 @@ private struct GeneratedPlanReviewSheet: View {
     let trip: Trip
     @Binding var plan: EditableTripPlan
     let userLocation: CLLocation?
+    let nearYouDistanceKilometers: Double
     let savePlan: (EditableTripPlan) throws -> Void
 
     @State private var saveErrorMessage: String?
@@ -714,6 +717,7 @@ private struct GeneratedPlanReviewSheet: View {
                             trip: trip,
                             item: $item,
                             userLocation: userLocation,
+                            nearYouDistanceKilometers: nearYouDistanceKilometers,
                             deleteItem: {
                                 deleteItem(id: item.id)
                             }
@@ -731,6 +735,7 @@ private struct GeneratedPlanReviewSheet: View {
                             trip: trip,
                             item: pendingItemBinding,
                             userLocation: userLocation,
+                            nearYouDistanceKilometers: nearYouDistanceKilometers,
                             confirmItem: confirmPendingItem,
                             deleteItem: cancelPendingItem
                         )
@@ -831,6 +836,7 @@ private struct GeneratedPlanReviewSheet: View {
 private struct EditableItineraryItemSection: View {
     let trip: Trip
     let userLocation: CLLocation?
+    let nearYouDistanceKilometers: Double
     @Binding var item: EditableItineraryItem
     var confirmItem: (() -> Void)?
     let deleteItem: () -> Void
@@ -842,11 +848,13 @@ private struct EditableItineraryItemSection: View {
         trip: Trip,
         item: Binding<EditableItineraryItem>,
         userLocation: CLLocation?,
+        nearYouDistanceKilometers: Double,
         confirmItem: (() -> Void)? = nil,
         deleteItem: @escaping () -> Void
     ) {
         self.trip = trip
         self.userLocation = userLocation
+        self.nearYouDistanceKilometers = nearYouDistanceKilometers
         _item = item
         self.confirmItem = confirmItem
         self.deleteItem = deleteItem
@@ -863,7 +871,8 @@ private struct EditableItineraryItemSection: View {
             initialValue: ActivityPlaceSearchService(
                 destination: trip.location,
                 destinationCoordinate: destinationCoordinate,
-                userLocation: userLocation
+                userLocation: userLocation,
+                nearYouDistanceKilometers: nearYouDistanceKilometers
             )
         )
     }
