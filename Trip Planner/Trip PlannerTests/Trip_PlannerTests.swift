@@ -196,16 +196,16 @@ struct TripPlannerFoundationTests {
         settings.addCustomInterest("Pottery")
 
         #expect(settings.isInterestSelected("museums"))
-        #expect(settings.selectedInterestNames == ["Museums", "Local Food", "pottery"])
-        #expect(settings.customInterestNames == ["pottery"])
+        #expect(settings.selectedInterestNames ?? [] == ["Museums", "Local Food", "pottery"])
+        #expect(settings.customInterestNames ?? [] == ["pottery"])
         #expect(settings.visibleSelectedInterests == ["Museums", "Local Food", "pottery"])
 
         settings.toggleInterest("Museums")
         settings.removeCustomInterest("POTTERY")
 
         #expect(settings.isInterestSelected("Museums") == false)
-        #expect(settings.selectedInterestNames == ["Local Food"])
-        #expect(settings.customInterestNames.isEmpty)
+        #expect(settings.selectedInterestNames ?? [] == ["Local Food"])
+        #expect(settings.customInterestNames?.isEmpty ?? true)
     }
 
     @MainActor
@@ -420,8 +420,8 @@ struct TripPlannerFoundationTests {
         let persistedSettings = try secondContext.fetch(FetchDescriptor<TravelSettings>())
         let persistedSetting = try #require(persistedSettings.first)
 
-        #expect(persistedSetting.selectedInterestNames == ["Hikes", "Gardens", "Jazz Clubs"])
-        #expect(persistedSetting.customInterestNames == ["Gardens", "Jazz Clubs"])
+        #expect(persistedSetting.selectedInterestNames ?? [] == ["Hikes", "Gardens", "Jazz Clubs"])
+        #expect(persistedSetting.customInterestNames ?? [] == ["Gardens", "Jazz Clubs"])
         #expect(persistedSetting.visibleSelectedInterests == ["Hikes", "Gardens", "Jazz Clubs"])
     }
 

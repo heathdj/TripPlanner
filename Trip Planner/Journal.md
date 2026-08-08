@@ -153,6 +153,8 @@ Fifth follow-up: Dashboard needed to confirm the saved trip by identity, not by 
 
 Sixth follow-up: the cleanest generated-trip lifecycle is "draft in memory, insert on final Save." Creating a trip before review made every later button responsible for preserving a provisional database row. Now the new trip stays in memory until the user presses the top-level Save, which inserts it once with the reviewed itinerary. Cancel cleans up any reviewed-plan draft rows so abandoned generated trips do not leave orphaned data behind.
 
+Seventh follow-up: the simulator finally told the truth with a Core Data migration error. `TravelSettings` had gained mandatory array attributes after earlier builds already created stores without those columns. SwiftData could not invent values during lightweight migration, so the whole container failed to load and no trips could persist. The active settings UI already uses AppStorage, so the fix was to make those legacy SwiftData arrays optional and normalize nil to empty arrays in code.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

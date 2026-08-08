@@ -8,8 +8,8 @@ final class TravelSettings {
     var defaultWindowLengthDays: Int
     var distanceUnitRawValue: String = DistanceUnit.kilometers.rawValue
     var nearYouDistanceKilometers: Double = TravelSettings.defaultNearYouDistanceKilometers
-    var selectedInterestNames: [String]
-    var customInterestNames: [String]
+    var selectedInterestNames: [String]?
+    var customInterestNames: [String]?
     var updatedAt: Date
 
     init(
@@ -52,7 +52,7 @@ final class TravelSettings {
 
     var visibleSelectedInterests: [String] {
         let builtIns = ActivityInterestCatalog.builtInInterests.filter { isInterestSelected($0) }
-        let custom = customInterestNames.filter { isInterestSelected($0) }
+        let custom = customInterests.filter { isInterestSelected($0) }
         return builtIns + custom
     }
 
@@ -76,15 +76,15 @@ final class TravelSettings {
     }
 
     func isInterestSelected(_ interest: String) -> Bool {
-        selectedInterestNames.contains { $0.localizedCaseInsensitiveCompare(interest) == .orderedSame }
+        selectedInterests.contains { $0.localizedCaseInsensitiveCompare(interest) == .orderedSame }
     }
 
     func toggleInterest(_ interest: String) {
         let normalized = interest.trimmingCharacters(in: .whitespacesAndNewlines)
         guard normalized.isEmpty == false else { return }
 
-        var interests = selectedInterestNames
-        if let index = selectedInterestNames.firstIndex(where: { $0.localizedCaseInsensitiveCompare(normalized) == .orderedSame }) {
+        var interests = selectedInterests
+        if let index = interests.firstIndex(where: { $0.localizedCaseInsensitiveCompare(normalized) == .orderedSame }) {
             interests.remove(at: index)
         } else {
             interests.append(normalized)
@@ -98,26 +98,34 @@ final class TravelSettings {
         let normalized = interest.trimmingCharacters(in: .whitespacesAndNewlines)
         guard normalized.isEmpty == false else { return }
 
-        var customInterests = customInterestNames
-        if customInterestNames.contains(where: { $0.localizedCaseInsensitiveCompare(normalized) == .orderedSame }) == false,
+        var updatedCustomInterests = customInterests
+        if updatedCustomInterests.contains(where: { $0.localizedCaseInsensitiveCompare(normalized) == .orderedSame }) == false,
            ActivityInterestCatalog.builtInInterests.contains(where: { $0.localizedCaseInsensitiveCompare(normalized) == .orderedSame }) == false {
-            customInterests.append(normalized)
+            updatedCustomInterests.append(normalized)
         }
 
-        var selectedInterests = selectedInterestNames
+        var updatedSelectedInterests = selectedInterests
         if isInterestSelected(normalized) == false {
-            selectedInterests.append(normalized)
+            updatedSelectedInterests.append(normalized)
         }
 
-        customInterestNames = customInterests
-        selectedInterestNames = selectedInterests
+        customInterestNames = updatedCustomInterests
+        selectedInterestNames = updatedSelectedInterests
         updatedAt = .now
     }
 
     func removeCustomInterest(_ interest: String) {
-        customInterestNames = customInterestNames.filter { $0.localizedCaseInsensitiveCompare(interest) != .orderedSame }
-        selectedInterestNames = selectedInterestNames.filter { $0.localizedCaseInsensitiveCompare(interest) != .orderedSame }
+        customInterestNames = customInterests.filter { $0.localizedCaseInsensitiveCompare(interest) != .orderedSame }
+        selectedInterestNames = selectedInterests.filter { $0.localizedCaseInsensitiveCompare(interest) != .orderedSame }
         updatedAt = .now
+    }
+
+    private var selectedInterests: [String] {
+        Self.normalizedInterests(from: selectedInterestNames ?? [])
+    }
+
+    private var customInterests: [String] {
+        Self.normalizedInterests(from: customInterestNames ?? [])
     }
 
     private static func normalizedInterests(from interests: [String]) -> [String] {
