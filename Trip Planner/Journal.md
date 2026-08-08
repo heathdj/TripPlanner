@@ -185,6 +185,8 @@ Follow-up bug: saved itinerary cards had plenty of useful action buttons, but th
 
 Second follow-up bug: "plan progress" was too vague because it counted a stored number instead of what the traveler could actually see. Progress now treats itinerary items with exact map coordinates as planned, and unresolved search-style items as not yet planned. Four stops with three exact places reads as `3 of 4 planned`, which makes the progress bar a map-detail meter instead of a mystery gauge.
 
+Third follow-up bug: action buttons inside rich itinerary cards tried to share one skinny row on compact phones, so labels like Directions and Refresh folded into letter towers. The fix was to make the actions a responsive grid with one-line labels, letting buttons wrap as whole controls instead of crushing the text.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

@@ -1643,32 +1643,40 @@ private struct ItineraryItemRow: View {
                     PlaceDetailsGrid(item: item)
                 }
 
-                HStack(spacing: 8) {
-                    Button("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill") {
+                LazyVGrid(columns: actionColumns, alignment: .leading, spacing: 8) {
+                    Button {
                         AppleMapsDirectionsService.openDirections(for: item, in: trip)
+                    } label: {
+                        actionLabel("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
                     }
                     .buttonStyle(.glass)
                     .accessibilityLabel(item.directionsAccessibilityLabel)
                     .accessibilityHint("Opens driving directions in Apple Maps")
 
                     if let websiteURL = validatedWebsiteURL {
-                        Button("Website", systemImage: "safari.fill") {
+                        Button {
                             UIApplication.shared.open(websiteURL)
+                        } label: {
+                            actionLabel("Website", systemImage: "safari.fill")
                         }
                         .buttonStyle(.glass)
                         .accessibilityLabel("Open website for \(item.name)")
                     }
 
                     if let phoneURL = validatedPhoneURL {
-                        Button("Call", systemImage: "phone.fill") {
+                        Button {
                             UIApplication.shared.open(phoneURL)
+                        } label: {
+                            actionLabel("Call", systemImage: "phone.fill")
                         }
                         .buttonStyle(.glass)
                         .accessibilityLabel("Call \(item.name)")
                     }
 
-                    Button("Refresh", systemImage: "arrow.clockwise") {
+                    Button {
                         refreshItem(item)
+                    } label: {
+                        actionLabel("Refresh", systemImage: "arrow.clockwise")
                     }
                     .buttonStyle(.glass)
                     .accessibilityLabel("Refresh place details for \(item.name)")
@@ -1683,6 +1691,19 @@ private struct ItineraryItemRow: View {
         .glassEffect(.regular.tint(.teal.opacity(0.08)), in: .rect(cornerRadius: 16))
         .accessibilityElement(children: .contain)
         .accessibilityHint("Opens an editable itinerary item view")
+    }
+
+    private var actionColumns: [GridItem] {
+        [
+            GridItem(.adaptive(minimum: 132), spacing: 8)
+        ]
+    }
+
+    private func actionLabel(_ title: String, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
+            .frame(maxWidth: .infinity)
     }
 
     private var validatedWebsiteURL: URL? {
