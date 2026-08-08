@@ -145,6 +145,8 @@ Follow-up bug: editable rows inside `Form` need careful button behavior. The fir
 
 Second follow-up: a newly generated trip needs a clear finish line. The detail sheet now treats the auto-generation path like a provisional workspace: Cancel can discard it before review is saved, and Save only lights up after the reviewed plan has been saved. That makes the lifecycle visible instead of hiding the important decision behind a generic Done button.
 
+Third follow-up: presentation state should travel with the thing being presented. Dashboard originally carried the selected trip and "start generated flow" as separate state values, which let the detail sheet open in normal Done mode when SwiftUI evaluated the sheet at the wrong moment. We wrapped the trip and its presentation mode together so a new generated trip cannot forget that it is provisional.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.
