@@ -8,9 +8,11 @@ struct TripDetailView: View {
     @State private var generatedDraft: TripPlanDraft?
     @State private var generationMessage: String?
     @State private var isGeneratingDraft = false
+    @State private var didStartInitialGeneration = false
 
     let trip: Trip
     var distanceSummary: String?
+    var startsGeneratingDraftOnAppear = false
     var openDirections: (ItineraryItem, Trip) -> Void = AppleMapsDirectionsService.openDirections
     var tripPlanGenerator: any TripPlanGenerating = FoundationModelsTripPlanGenerator()
 
@@ -64,6 +66,16 @@ struct TripDetailView: View {
                         dismiss()
                     }
                 }
+            }
+            .task {
+                guard startsGeneratingDraftOnAppear,
+                      didStartInitialGeneration == false
+                else {
+                    return
+                }
+
+                didStartInitialGeneration = true
+                generateDraft()
             }
         }
     }

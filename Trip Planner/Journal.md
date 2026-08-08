@@ -127,6 +127,8 @@ The important boundary is the sanitizer. The model can suggest, but the app stil
 
 Small war story: Apple's docs show `GenerationID` inside a nested generated item example, but this SDK's macro expansion rejected it because `GenerationID` did not conform to the generated-content protocols. We removed it and let Trip Planner create UUID-backed `ItineraryItem` values after sanitization, which is cleaner for our model anyway.
 
+Follow-up bug: the generated draft feature depended on an existing trip, but the dashboard `+` button was still an empty action. That meant the front door to the feature looked real but opened into a wall. The fix was to add a small New Trip sheet, save the seed trip first, then open Trip Details and start the on-device draft flow there. The generated itinerary still stays unsaved until a later review/save feature exists.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

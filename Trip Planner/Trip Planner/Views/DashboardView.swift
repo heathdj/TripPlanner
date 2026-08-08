@@ -4,11 +4,15 @@ import SwiftUI
 import UIKit
 
 struct DashboardView: View {
+    @Environment(\.modelContext) private var modelContext
     @Query private var trips: [Trip]
     @Query private var settings: [TravelSettings]
 
     @State private var locationService = LocationService()
     @State private var selectedTrip: Trip?
+    @State private var isShowingNewTrip = false
+    @State private var shouldGenerateDraftForSelectedTrip = false
+    @State private var pendingCreatedTrip: Trip?
 
     private let columns = [
         GridItem(.adaptive(minimum: 280), spacing: 16)
@@ -99,16 +103,24 @@ struct DashboardView: View {
             .navigationTitle("Trip Planner")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button("Add Trip", systemImage: "plus") { }
+                    Button("Add Trip", systemImage: "plus") {
+                        isShowingNewTrip = true
+                    }
                         .buttonStyle(.glassProminent)
                         .accessibilityHint("Creates a new trip")
                 }
             }
         }
+        .sheet(isPresented: $isShowingNewTrip, onDismiss: openPendingCreatedTrip) {
+            NewTripView(settings: settings.first) { trip in
+                createTrip(trip)
+            }
+        }
         .sheet(item: $selectedTrip) { trip in
             TripDetailView(
                 trip: trip,
-                distanceSummary: distanceSummary(for: trip)
+                distanceSummary: distanceSummary(for: trip),
+                startsGeneratingDraftOnAppear: shouldGenerateDraftForSelectedTrip
             )
         }
         .task {
@@ -122,6 +134,21 @@ struct DashboardView: View {
     }
 
     private func selectTrip(_ trip: Trip) {
+        shouldGenerateDraftForSelectedTrip = false
+        selectedTrip = trip
+    }
+
+    private func createTrip(_ trip: Trip) {
+        modelContext.insert(trip)
+        try? modelContext.save()
+        pendingCreatedTrip = trip
+    }
+
+    private func openPendingCreatedTrip() {
+        guard let trip = pendingCreatedTrip else { return }
+
+        pendingCreatedTrip = nil
+        shouldGenerateDraftForSelectedTrip = true
         selectedTrip = trip
     }
 
