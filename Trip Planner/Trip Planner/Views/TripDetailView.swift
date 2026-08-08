@@ -4,16 +4,31 @@ import SwiftUI
 struct TripDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Query private var reviewedPlans: [ReviewedTripPlan]
+    @AppStorage(TravelPreferencesStorage.Key.selectedInterestNames) private var selectedInterestNamesData = TravelPreferencesStorage.defaultSelectedInterestsData
+    @AppStorage(TravelPreferencesStorage.Key.customInterestNames) private var customInterestNamesData = TravelPreferencesStorage.defaultCustomInterestsData
+    @State private var generatedDraft: TripPlanDraft?
+    @State private var generationMessage: String?
+    @State private var isGeneratingDraft = false
+    @State private var didStartInitialGeneration = false
 
     let trip: Trip
     var distanceSummary: String?
+    var startsGeneratingDraftOnAppear = false
     var openDirections: (ItineraryItem, Trip) -> Void = AppleMapsDirectionsService.openDirections
+    var tripPlanGenerator: any TripPlanGenerating = FoundationModelsTripPlanGenerator()
 
     private var savedPlan: ReviewedTripPlan? {
         reviewedPlans
             .filter { $0.tripID == trip.id }
             .sorted { $0.reviewedAt > $1.reviewedAt }
             .first
+    }
+
+    private var selectedInterests: [String] {
+        TravelPreferencesStorage.visibleSelectedInterests(
+            selected: TravelPreferencesStorage.decodeInterests(from: selectedInterestNamesData),
+            custom: TravelPreferencesStorage.decodeInterests(from: customInterestNamesData)
+        )
     }
 
     var body: some View {
@@ -27,6 +42,14 @@ struct TripDetailView: View {
                         DetailHero(trip: trip, distanceSummary: distanceSummary)
                         TripFactsGrid(trip: trip, distanceSummary: distanceSummary)
                         SavedPlanSection(plan: savedPlan)
+                        GeneratedPlanSection(
+                            status: tripPlanGenerator.status,
+                            selectedInterests: selectedInterests,
+                            draft: generatedDraft,
+                            message: generationMessage,
+                            isGenerating: isGeneratingDraft,
+                            generate: generateDraft
+                        )
                         ItinerarySection(
                             trip: trip,
                             items: trip.itineraryItems,
@@ -48,6 +71,42 @@ struct TripDetailView: View {
                     }
                 }
             }
+            .task {
+                guard startsGeneratingDraftOnAppear,
+                      didStartInitialGeneration == false
+                else {
+                    return
+                }
+
+                didStartInitialGeneration = true
+                generateDraft()
+            }
+        }
+    }
+
+    private func generateDraft() {
+        guard isGeneratingDraft == false else { return }
+
+        isGeneratingDraft = true
+        generationMessage = nil
+
+        let input = TripPlanGenerationInput(
+            trip: trip,
+            selectedInterests: selectedInterests
+        )
+
+        Task {
+            do {
+                generatedDraft = try await tripPlanGenerator.generateDraft(for: input)
+            } catch let error as TripPlanGenerationError {
+                generatedDraft = nil
+                generationMessage = error.localizedDescription
+            } catch {
+                generatedDraft = nil
+                generationMessage = "Trip generation failed. Try again in a moment."
+            }
+
+            isGeneratingDraft = false
         }
     }
 }
@@ -227,6 +286,165 @@ private struct SavedPlanSection: View {
                     Label("No saved plan yet", systemImage: "tray")
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
+private struct GeneratedPlanSection: View {
+    let status: TripPlanGenerationStatus
+    let selectedInterests: [String]
+    let draft: TripPlanDraft?
+    let message: String?
+    let isGenerating: Bool
+    let generate: () -> Void
+
+    var body: some View {
+        GlassPanel {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "sparkles")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(.teal, in: .circle)
+                        .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Generated Draft")
+                            .font(.headline)
+                            .fontDesign(.rounded)
+
+                        Text(status.message)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 8)
+                }
+
+                if selectedInterests.isEmpty == false {
+                    InterestSummary(interests: selectedInterests)
+                }
+
+                if let message {
+                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let draft {
+                    GeneratedDraftPreview(draft: draft)
+                }
+
+                Button {
+                    generate()
+                } label: {
+                    if isGenerating {
+                        Label("Generating", systemImage: "hourglass")
+                    } else {
+                        Label(draft == nil ? "Generate Draft" : "Regenerate Draft", systemImage: "sparkles")
+                    }
+                }
+                .buttonStyle(.glassProminent)
+                .disabled(isGenerating || status.isAvailable == false)
+                .accessibilityHint("Creates an on-device draft without saving it to this trip")
+            }
+        }
+    }
+}
+
+private struct InterestSummary: View {
+    let interests: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Using Interests")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 94), spacing: 8)], alignment: .leading, spacing: 8) {
+                ForEach(interests, id: \.self) { interest in
+                    Text(interest)
+                        .font(.caption.weight(.semibold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .glassEffect(.regular.tint(.teal.opacity(0.14)), in: .capsule)
+                }
+            }
+        }
+    }
+}
+
+private struct GeneratedDraftPreview: View {
+    let draft: TripPlanDraft
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(draft.title)
+                    .font(.subheadline.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(draft.overview)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Label("Draft only. Review before saving in a future save flow.", systemImage: "pencil.and.list.clipboard")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(draft.items) { item in
+                    GeneratedDraftItemRow(item: item)
+                }
+            }
+        }
+        .padding(12)
+        .glassEffect(.regular.tint(.teal.opacity(0.08)), in: .rect(cornerRadius: 16))
+    }
+}
+
+private struct GeneratedDraftItemRow: View {
+    let item: ItineraryItem
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: item.category.systemImage)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.teal)
+                .frame(width: 28, height: 28)
+                .glassEffect(.regular.tint(.teal.opacity(0.14)), in: .circle)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(item.name)
+                        .font(.subheadline.weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 8)
+
+                    Text(item.dayDisplayString)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(item.category.displayName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.teal)
+
+                if item.notesOrAddress.isEmpty == false {
+                    Text(item.notesOrAddress)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }

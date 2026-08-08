@@ -10,12 +10,7 @@ enum TripSeedService {
     }
 
     private static func seedSettingsIfNeeded(in context: ModelContext) throws {
-        let descriptor = FetchDescriptor<TravelSettings>()
-        let count = try context.fetchCount(descriptor)
-
-        if count == 0 {
-            context.insert(TravelSettings())
-        }
+        _ = try TravelSettingsStore.settings(in: context)
     }
 
     private static func seedTripsIfNeeded(in context: ModelContext) throws {

@@ -83,12 +83,14 @@ final class TravelSettings {
         let normalized = interest.trimmingCharacters(in: .whitespacesAndNewlines)
         guard normalized.isEmpty == false else { return }
 
+        var interests = selectedInterestNames
         if let index = selectedInterestNames.firstIndex(where: { $0.localizedCaseInsensitiveCompare(normalized) == .orderedSame }) {
-            selectedInterestNames.remove(at: index)
+            interests.remove(at: index)
         } else {
-            selectedInterestNames.append(normalized)
+            interests.append(normalized)
         }
 
+        selectedInterestNames = interests
         updatedAt = .now
     }
 
@@ -96,21 +98,25 @@ final class TravelSettings {
         let normalized = interest.trimmingCharacters(in: .whitespacesAndNewlines)
         guard normalized.isEmpty == false else { return }
 
+        var customInterests = customInterestNames
         if customInterestNames.contains(where: { $0.localizedCaseInsensitiveCompare(normalized) == .orderedSame }) == false,
            ActivityInterestCatalog.builtInInterests.contains(where: { $0.localizedCaseInsensitiveCompare(normalized) == .orderedSame }) == false {
-            customInterestNames.append(normalized)
+            customInterests.append(normalized)
         }
 
+        var selectedInterests = selectedInterestNames
         if isInterestSelected(normalized) == false {
-            selectedInterestNames.append(normalized)
+            selectedInterests.append(normalized)
         }
 
+        customInterestNames = customInterests
+        selectedInterestNames = selectedInterests
         updatedAt = .now
     }
 
     func removeCustomInterest(_ interest: String) {
-        customInterestNames.removeAll { $0.localizedCaseInsensitiveCompare(interest) == .orderedSame }
-        selectedInterestNames.removeAll { $0.localizedCaseInsensitiveCompare(interest) == .orderedSame }
+        customInterestNames = customInterestNames.filter { $0.localizedCaseInsensitiveCompare(interest) != .orderedSame }
+        selectedInterestNames = selectedInterestNames.filter { $0.localizedCaseInsensitiveCompare(interest) != .orderedSame }
         updatedAt = .now
     }
 

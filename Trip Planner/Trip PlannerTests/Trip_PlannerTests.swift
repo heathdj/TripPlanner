@@ -209,6 +209,51 @@ struct TripPlannerFoundationTests {
     }
 
     @MainActor
+    @Test("Trip generation prompt includes private planning inputs", .bug("https://github.com/heathdj/TripPlanner/issues/7"))
+    func tripGenerationPromptIncludesPrivatePlanningInputs() {
+        let input = TripPlanGenerationInput(
+            destination: "Sydney, Australia",
+            travelWindow: "Aug 1-Aug 15, 2026",
+            durationDays: 4,
+            travelerCount: 2,
+            theme: "Harbor views and local food",
+            selectedInterests: ["Museums", "Local Food"]
+        )
+
+        let prompt = FoundationModelsTripPlanGenerator.prompt(for: input)
+
+        #expect(prompt.contains("Destination: Sydney, Australia"))
+        #expect(prompt.contains("Flexible travel window: Aug 1-Aug 15, 2026"))
+        #expect(prompt.contains("Trip duration: 4 days"))
+        #expect(prompt.contains("Traveler count: 2"))
+        #expect(prompt.contains("Trip theme: Harbor views and local food"))
+        #expect(prompt.contains("Selected interests: Museums, Local Food"))
+        #expect(prompt.contains("Do not include reservations, prices, weather, hours, live schedules"))
+    }
+
+    @MainActor
+    @Test("Generated trip drafts clamp days and preserve supported categories", .bug("https://github.com/heathdj/TripPlanner/issues/7"))
+    func generatedTripDraftsClampDaysAndPreserveSupportedCategories() {
+        let draft = TripPlanGenerationSanitizer.draft(
+            title: "  ",
+            overview: "",
+            items: [
+                TripPlanDraftItemInput(name: "Late dinner", notes: "Neighborhood suggestion", category: .food, dayNumber: 9),
+                TripPlanDraftItemInput(name: "Arrival", notes: "Airport to hotel", category: .transit, dayNumber: 0),
+                TripPlanDraftItemInput(name: "Gallery", notes: "Indoor option", category: .activity, dayNumber: 2),
+                TripPlanDraftItemInput(name: "", notes: "", category: .stay, dayNumber: 1)
+            ],
+            durationDays: 3
+        )
+
+        #expect(draft.title == "Generated Trip Draft")
+        #expect(draft.overview == "Review these on-device suggestions before saving anything to your trip.")
+        #expect(draft.items.map(\.dayNumber) == [1, 1, 2, 3])
+        #expect(draft.items.map(\.category) == [.transit, .stay, .activity, .food])
+        #expect(draft.items[1].name == "Trip idea")
+    }
+
+    @MainActor
     @Test("Nearby grouping promotes only open trips inside the radius", .bug("https://github.com/heathdj/TripPlanner/issues/3"))
     func nearbyGroupingPromotesOpenTripsInsideRadius() {
         let userLocation = CLLocation(latitude: 41.8781, longitude: -87.6298)
@@ -360,6 +405,86 @@ struct TripPlannerFoundationTests {
         #expect(persistedSetting.selectedInterestNames == ["Hikes", "Gardens", "Jazz Clubs"])
         #expect(persistedSetting.customInterestNames == ["Gardens", "Jazz Clubs"])
         #expect(persistedSetting.visibleSelectedInterests == ["Hikes", "Gardens", "Jazz Clubs"])
+    }
+
+    @Test("Travel preferences encode and mutate selected interests")
+    func travelPreferencesEncodeAndMutateSelectedInterests() {
+        let encoded = TravelPreferencesStorage.encodeInterests([
+            " Museums ",
+            "museums",
+            "Local Food",
+            ""
+        ])
+
+        #expect(TravelPreferencesStorage.decodeInterests(from: encoded) == ["Museums", "Local Food"])
+        #expect(TravelPreferencesStorage.decodeInterests(from: "not json") == [])
+
+        let selectedMuseums = TravelPreferencesStorage.toggledInterest("Museums", selected: [])
+        #expect(selectedMuseums == ["Museums"])
+        #expect(TravelPreferencesStorage.toggledInterest("museums", selected: selectedMuseums).isEmpty)
+
+        let updated = TravelPreferencesStorage.addingCustomInterest(
+            " Gardens ",
+            selected: selectedMuseums,
+            custom: []
+        )
+
+        #expect(updated.selected == ["Museums", "Gardens"])
+        #expect(updated.custom == ["Gardens"])
+        #expect(
+            TravelPreferencesStorage.visibleSelectedInterests(
+                selected: updated.selected,
+                custom: updated.custom
+            ) == ["Museums", "Gardens"]
+        )
+
+        let removed = TravelPreferencesStorage.removingCustomInterest(
+            "gardens",
+            selected: updated.selected,
+            custom: updated.custom
+        )
+
+        #expect(removed.selected == ["Museums"])
+        #expect(removed.custom.isEmpty)
+    }
+
+    @MainActor
+    @Test("Travel settings store reuses the persisted settings row")
+    func travelSettingsStoreReusesPersistedSettingsRow() throws {
+        let storeURL = temporaryStoreURL()
+        try removeStore(at: storeURL)
+        defer { try? removeStore(at: storeURL) }
+
+        let firstContainer = try makeContainer(at: storeURL)
+        let firstContext = ModelContext(firstContainer)
+        let settings = try TravelSettingsStore.settings(in: firstContext)
+        settings.updateDefaultDuration(days: 9)
+        settings.updateDefaultWindowLength(days: 21)
+        settings.toggleInterest("Museums")
+        try firstContext.save()
+
+        let sameSettings = try TravelSettingsStore.settings(in: firstContext)
+
+        #expect(sameSettings.id == settings.id)
+
+        let secondContainer = try makeContainer(at: storeURL)
+        let secondContext = ModelContext(secondContainer)
+        let persistedSettings = try secondContext.fetch(FetchDescriptor<TravelSettings>())
+        let persistedSetting = try #require(persistedSettings.first)
+
+        #expect(persistedSettings.count == 1)
+        #expect(persistedSetting.defaultDurationDays == 9)
+        #expect(persistedSetting.defaultWindowLengthDays == 21)
+        #expect(persistedSetting.visibleSelectedInterests == ["Museums"])
+    }
+
+    @Test("Destination suggestions combine title and subtitle cleanly")
+    func destinationSuggestionsCombineTitleAndSubtitleCleanly() {
+        let city = DestinationSuggestion(title: "Sydney", subtitle: "New South Wales, Australia")
+        let country = DestinationSuggestion(title: "Japan", subtitle: "")
+
+        #expect(city.displayText == "Sydney, New South Wales, Australia")
+        #expect(country.displayText == "Japan")
     }
 
     @MainActor

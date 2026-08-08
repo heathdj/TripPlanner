@@ -4,29 +4,33 @@ import SwiftUI
 import UIKit
 
 struct DashboardView: View {
+    @Environment(\.modelContext) private var modelContext
     @Query private var trips: [Trip]
-    @Query private var settings: [TravelSettings]
+
+    @AppStorage(TravelPreferencesStorage.Key.defaultDurationDays) private var defaultDurationDays = TravelSettings.defaultDurationDays
+    @AppStorage(TravelPreferencesStorage.Key.defaultWindowLengthDays) private var defaultWindowLengthDays = TravelSettings.defaultWindowLengthDays
+    @AppStorage(TravelPreferencesStorage.Key.distanceUnit) private var distanceUnitRawValue = DistanceUnit.kilometers.rawValue
+    @AppStorage(TravelPreferencesStorage.Key.nearYouDistanceKilometers) private var nearYouDistanceKilometers = TravelSettings.defaultNearYouDistanceKilometers
 
     @State private var locationService = LocationService()
     @State private var selectedTrip: Trip?
+    @State private var isShowingNewTrip = false
+    @State private var shouldGenerateDraftForSelectedTrip = false
+    @State private var pendingCreatedTrip: Trip?
 
     private let columns = [
         GridItem(.adaptive(minimum: 280), spacing: 16)
     ]
 
     private var distanceUnit: DistanceUnit {
-        settings.first?.distanceUnit ?? .kilometers
-    }
-
-    private var nearYouDistanceKilometers: Double {
-        settings.first?.nearYouDistanceKilometers ?? TravelSettings.defaultNearYouDistanceKilometers
+        DistanceUnit(rawValue: distanceUnitRawValue) ?? .kilometers
     }
 
     private var tripGroups: TripGroups {
         TripStore.groupedTrips(
             trips,
             userLocation: locationService.currentLocation,
-            nearYouDistanceKilometers: nearYouDistanceKilometers
+            nearYouDistanceKilometers: max(1, nearYouDistanceKilometers)
         )
     }
 
@@ -99,16 +103,28 @@ struct DashboardView: View {
             .navigationTitle("Trip Planner")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button("Add Trip", systemImage: "plus") { }
+                    Button("Add Trip", systemImage: "plus") {
+                        isShowingNewTrip = true
+                    }
                         .buttonStyle(.glassProminent)
                         .accessibilityHint("Creates a new trip")
                 }
             }
         }
+        .sheet(isPresented: $isShowingNewTrip, onDismiss: openPendingCreatedTrip) {
+            NewTripView(
+                defaultDurationDays: defaultDurationDays,
+                defaultWindowLengthDays: defaultWindowLengthDays,
+                userLocation: locationService.currentLocation
+            ) { trip in
+                createTrip(trip)
+            }
+        }
         .sheet(item: $selectedTrip) { trip in
             TripDetailView(
                 trip: trip,
-                distanceSummary: distanceSummary(for: trip)
+                distanceSummary: distanceSummary(for: trip),
+                startsGeneratingDraftOnAppear: shouldGenerateDraftForSelectedTrip
             )
         }
         .task {
@@ -122,6 +138,21 @@ struct DashboardView: View {
     }
 
     private func selectTrip(_ trip: Trip) {
+        shouldGenerateDraftForSelectedTrip = false
+        selectedTrip = trip
+    }
+
+    private func createTrip(_ trip: Trip) {
+        modelContext.insert(trip)
+        try? modelContext.save()
+        pendingCreatedTrip = trip
+    }
+
+    private func openPendingCreatedTrip() {
+        guard let trip = pendingCreatedTrip else { return }
+
+        pendingCreatedTrip = nil
+        shouldGenerateDraftForSelectedTrip = true
         selectedTrip = trip
     }
 
