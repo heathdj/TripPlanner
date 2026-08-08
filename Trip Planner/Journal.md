@@ -133,6 +133,14 @@ Second follow-up: Settings needed a sturdier memory. SwiftData persisted the set
 
 Third follow-up: the settings row still made the UI too fragile. If SwiftData did not hand Settings a row at exactly the right moment, Trip Defaults and Activity Interests became blank restaurant menus: nice section titles, no food. The fix was to move user preferences to `@AppStorage`, storing simple values directly in `UserDefaults` and JSON-encoding the interest arrays. SwiftData remains the suitcase for real trip records and reviewed plans; AppStorage is the jacket pocket for small personal preferences the UI must always be able to read instantly.
 
+### 2026-08-07: Issue #8 Puts AI Output at the Editing Desk
+
+Issue `#8` added the guardrail that generated plans needed from the start: the model can draft, but the traveler gets the final say. Generation now opens a review sheet where the title, overview, item names, notes, categories, and day assignments can all be changed before anything touches the real trip.
+
+The persistence rule is intentionally strict. Saving a reviewed plan replaces the previous reviewed plan for that trip, sorts named items by day, drops blank items, updates the trip itinerary, and keeps items compatible with Apple Maps. Cancel is just closing the notebook without tearing out any pages: the existing trip stays untouched.
+
+The engineering lesson is that AI workflows need a customs checkpoint. Generated data is useful cargo, but it should be inspected, edited, and stamped by the user before it becomes app state.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

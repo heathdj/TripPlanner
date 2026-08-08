@@ -3,10 +3,13 @@ import SwiftUI
 
 struct TripDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @Query private var reviewedPlans: [ReviewedTripPlan]
     @AppStorage(TravelPreferencesStorage.Key.selectedInterestNames) private var selectedInterestNamesData = TravelPreferencesStorage.defaultSelectedInterestsData
     @AppStorage(TravelPreferencesStorage.Key.customInterestNames) private var customInterestNamesData = TravelPreferencesStorage.defaultCustomInterestsData
     @State private var generatedDraft: TripPlanDraft?
+    @State private var editablePlan = EditableTripPlan()
+    @State private var isShowingReviewSheet = false
     @State private var generationMessage: String?
     @State private var isGeneratingDraft = false
     @State private var didStartInitialGeneration = false
@@ -48,6 +51,7 @@ struct TripDetailView: View {
                             draft: generatedDraft,
                             message: generationMessage,
                             isGenerating: isGeneratingDraft,
+                            reviewDraft: reviewDraft,
                             generate: generateDraft
                         )
                         ItinerarySection(
@@ -81,6 +85,13 @@ struct TripDetailView: View {
                 didStartInitialGeneration = true
                 generateDraft()
             }
+            .sheet(isPresented: $isShowingReviewSheet) {
+                GeneratedPlanReviewSheet(
+                    trip: trip,
+                    plan: $editablePlan,
+                    savePlan: saveReviewedPlan
+                )
+            }
         }
     }
 
@@ -98,6 +109,10 @@ struct TripDetailView: View {
         Task {
             do {
                 generatedDraft = try await tripPlanGenerator.generateDraft(for: input)
+                if let generatedDraft {
+                    editablePlan = EditableTripPlan(draft: generatedDraft)
+                    isShowingReviewSheet = true
+                }
             } catch let error as TripPlanGenerationError {
                 generatedDraft = nil
                 generationMessage = error.localizedDescription
@@ -108,6 +123,25 @@ struct TripDetailView: View {
 
             isGeneratingDraft = false
         }
+    }
+
+    private func reviewDraft() {
+        if let generatedDraft {
+            editablePlan = EditableTripPlan(draft: generatedDraft)
+        }
+
+        isShowingReviewSheet = true
+    }
+
+    private func saveReviewedPlan(_ plan: EditableTripPlan) throws {
+        _ = try ReviewedTripPlanStore.saveReviewedPlan(
+            title: plan.title,
+            overview: plan.overview,
+            items: plan.itineraryItems,
+            for: trip,
+            in: modelContext
+        )
+        generatedDraft = nil
     }
 }
 
@@ -298,6 +332,7 @@ private struct GeneratedPlanSection: View {
     let draft: TripPlanDraft?
     let message: String?
     let isGenerating: Bool
+    let reviewDraft: () -> Void
     let generate: () -> Void
 
     var body: some View {
@@ -337,7 +372,7 @@ private struct GeneratedPlanSection: View {
                 }
 
                 if let draft {
-                    GeneratedDraftPreview(draft: draft)
+                    GeneratedDraftPreview(draft: draft, reviewDraft: reviewDraft)
                 }
 
                 Button {
@@ -382,6 +417,7 @@ private struct InterestSummary: View {
 
 private struct GeneratedDraftPreview: View {
     let draft: TripPlanDraft
+    let reviewDraft: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -395,7 +431,7 @@ private struct GeneratedDraftPreview: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Label("Draft only. Review before saving in a future save flow.", systemImage: "pencil.and.list.clipboard")
+                Label("Draft only. Review and save to update this trip.", systemImage: "pencil.and.list.clipboard")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -405,6 +441,12 @@ private struct GeneratedDraftPreview: View {
                     GeneratedDraftItemRow(item: item)
                 }
             }
+
+            Button("Review Draft", systemImage: "pencil.and.list.clipboard") {
+                reviewDraft()
+            }
+            .buttonStyle(.glass)
+            .accessibilityHint("Opens the generated plan for editing before saving")
         }
         .padding(12)
         .glassEffect(.regular.tint(.teal.opacity(0.08)), in: .rect(cornerRadius: 16))
@@ -447,6 +489,261 @@ private struct GeneratedDraftItemRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+        }
+    }
+}
+
+private struct EditableTripPlan {
+    var title: String
+    var overview: String
+    var items: [EditableItineraryItem]
+
+    init(
+        title: String = "",
+        overview: String = "",
+        items: [EditableItineraryItem] = []
+    ) {
+        self.title = title
+        self.overview = overview
+        self.items = items
+    }
+
+    init(draft: TripPlanDraft) {
+        self.init(
+            title: draft.title,
+            overview: draft.overview,
+            items: draft.items.map(EditableItineraryItem.init)
+        )
+    }
+
+    var hasValidTitle: Bool {
+        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
+    var hasNamedItem: Bool {
+        items.contains { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false }
+    }
+
+    var canSave: Bool {
+        hasValidTitle && hasNamedItem
+    }
+
+    var itineraryItems: [ItineraryItem] {
+        items.map(\.itineraryItem)
+    }
+}
+
+private struct EditableItineraryItem: Identifiable {
+    var id: UUID
+    var name: String
+    var notesOrAddress: String
+    var category: ItineraryItemCategory
+    var dayNumber: Int
+    var latitude: Double?
+    var longitude: Double?
+
+    init(
+        id: UUID = UUID(),
+        name: String = "",
+        notesOrAddress: String = "",
+        category: ItineraryItemCategory = .activity,
+        dayNumber: Int = 1,
+        latitude: Double? = nil,
+        longitude: Double? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.notesOrAddress = notesOrAddress
+        self.category = category
+        self.dayNumber = max(1, dayNumber)
+        self.latitude = latitude
+        self.longitude = longitude
+    }
+
+    init(item: ItineraryItem) {
+        self.init(
+            id: item.id,
+            name: item.name,
+            notesOrAddress: item.notesOrAddress,
+            category: item.category,
+            dayNumber: item.dayNumber,
+            latitude: item.latitude,
+            longitude: item.longitude
+        )
+    }
+
+    var itineraryItem: ItineraryItem {
+        ItineraryItem(
+            id: id,
+            name: name,
+            notesOrAddress: notesOrAddress,
+            category: category,
+            dayNumber: dayNumber,
+            latitude: latitude,
+            longitude: longitude
+        )
+    }
+}
+
+private struct GeneratedPlanReviewSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let trip: Trip
+    @Binding var plan: EditableTripPlan
+    let savePlan: (EditableTripPlan) throws -> Void
+
+    @State private var saveErrorMessage: String?
+
+    private var isShowingSaveError: Binding<Bool> {
+        Binding {
+            saveErrorMessage != nil
+        } set: { isPresented in
+            if isPresented == false {
+                saveErrorMessage = nil
+            }
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Plan") {
+                    TextField("Title", text: $plan.title)
+                        .textInputAutocapitalization(.words)
+
+                    TextField("Overview", text: $plan.overview, axis: .vertical)
+                        .lineLimit(3...6)
+                        .textInputAutocapitalization(.sentences)
+                }
+
+                Section {
+                    ForEach($plan.items) { $item in
+                        EditableItineraryItemSection(
+                            trip: trip,
+                            item: $item,
+                            deleteItem: {
+                                deleteItem(id: item.id)
+                            }
+                        )
+                    }
+
+                    Button("Add Item", systemImage: "plus") {
+                        addItem()
+                    }
+                } header: {
+                    Text("Items")
+                } footer: {
+                    Text("Save is available when the plan has a title and at least one named item.")
+                }
+            }
+            .navigationTitle("Review Plan")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        save()
+                    }
+                    .disabled(plan.canSave == false)
+                }
+            }
+            .alert("Plan Not Saved", isPresented: isShowingSaveError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(saveErrorMessage ?? "Review the plan and try again.")
+            }
+        }
+    }
+
+    private func addItem() {
+        let nextDay = min(max(1, plan.items.last?.dayNumber ?? 1), trip.durationDays)
+        plan.items.append(
+            EditableItineraryItem(
+                name: "",
+                notesOrAddress: "",
+                category: .activity,
+                dayNumber: nextDay
+            )
+        )
+    }
+
+    private func deleteItem(id: UUID) {
+        plan.items.removeAll { $0.id == id }
+    }
+
+    private func save() {
+        do {
+            try savePlan(plan)
+            dismiss()
+        } catch let error as ReviewedTripPlanStore.ValidationError {
+            saveErrorMessage = error.localizedDescription
+        } catch {
+            saveErrorMessage = "Trip Planner could not save this reviewed plan. Try again."
+        }
+    }
+}
+
+private struct EditableItineraryItemSection: View {
+    let trip: Trip
+    @Binding var item: EditableItineraryItem
+    let deleteItem: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(item.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "New Item" : item.name)
+                    .font(.subheadline.weight(.semibold))
+
+                Spacer()
+
+                Button("Delete", systemImage: "trash", role: .destructive) {
+                    deleteItem()
+                }
+                .labelStyle(.iconOnly)
+                .accessibilityLabel("Delete \(item.name.isEmpty ? "item" : item.name)")
+            }
+
+            TextField("Name", text: $item.name)
+                .textInputAutocapitalization(.words)
+
+            TextField("Notes or address", text: $item.notesOrAddress, axis: .vertical)
+                .lineLimit(2...4)
+                .textInputAutocapitalization(.sentences)
+
+            Picker("Category", selection: $item.category) {
+                ForEach(ItineraryItemCategory.allCases) { category in
+                    Label(category.displayName, systemImage: category.systemImage)
+                        .tag(category)
+                }
+            }
+
+            Stepper(value: dayBinding, in: 1...max(1, trip.durationDays), step: 1) {
+                LabeledContent("Day", value: "Day \(item.dayNumber)")
+            }
+
+            if item.latitude != nil || item.longitude != nil {
+                Label("Location coordinates will be kept for Maps directions.", systemImage: "mappin.and.ellipse")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Label("Directions will search this item with the trip destination.", systemImage: "magnifyingglass")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var dayBinding: Binding<Int> {
+        Binding {
+            min(max(1, item.dayNumber), max(1, trip.durationDays))
+        } set: { newValue in
+            item.dayNumber = min(max(1, newValue), max(1, trip.durationDays))
         }
     }
 }

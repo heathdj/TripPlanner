@@ -478,6 +478,107 @@ struct TripPlannerFoundationTests {
         #expect(persistedSetting.visibleSelectedInterests == ["Museums"])
     }
 
+    @MainActor
+    @Test("Reviewed plan save sorts items and replaces existing plans", .bug("https://github.com/heathdj/TripPlanner/issues/8"))
+    func reviewedPlanSaveSortsItemsAndReplacesExistingPlans() throws {
+        let storeURL = temporaryStoreURL()
+        try removeStore(at: storeURL)
+        defer { try? removeStore(at: storeURL) }
+
+        let firstContainer = try makeContainer(at: storeURL)
+        let firstContext = ModelContext(firstContainer)
+        let trip = Trip(
+            title: "Reviewed",
+            location: "Lisbon",
+            windowStartDate: date(year: 2026, month: 9, day: 1),
+            windowEndDate: date(year: 2026, month: 9, day: 8),
+            durationDays: 4,
+            itineraryItems: [
+                ItineraryItem(name: "Old item", category: .activity, dayNumber: 1)
+            ]
+        )
+        let oldPlan = ReviewedTripPlan(
+            tripID: trip.id,
+            title: "Old plan",
+            notes: "Replace me"
+        )
+
+        firstContext.insert(trip)
+        firstContext.insert(oldPlan)
+        try firstContext.save()
+
+        let reviewedPlan = try ReviewedTripPlanStore.saveReviewedPlan(
+            title: "  Lisbon food weekend  ",
+            overview: "  Reviewed and ready.  ",
+            items: [
+                ItineraryItem(name: "Dinner", notesOrAddress: "Bairro Alto", category: .food, dayNumber: 2),
+                ItineraryItem(name: " Arrival ", notesOrAddress: "Airport to hotel", category: .transit, dayNumber: 1),
+                ItineraryItem(name: "", notesOrAddress: "Drop blank item", category: .activity, dayNumber: 1),
+                ItineraryItem(name: "Brunch", notesOrAddress: "Search by area", category: .food, dayNumber: 2)
+            ],
+            for: trip,
+            in: firstContext
+        )
+
+        #expect(reviewedPlan.title == "Lisbon food weekend")
+        #expect(reviewedPlan.notes == "Reviewed and ready.")
+        #expect(trip.itineraryItems.map(\.name) == ["Arrival", "Brunch", "Dinner"])
+        #expect(trip.itineraryItems.map(\.dayNumber) == [1, 2, 2])
+        #expect(trip.plannedItemCount == 3)
+        #expect(trip.completedItemCount == 0)
+
+        let secondContainer = try makeContainer(at: storeURL)
+        let secondContext = ModelContext(secondContainer)
+        let persistedTrips = try secondContext.fetch(FetchDescriptor<Trip>())
+        let persistedPlans = try secondContext.fetch(FetchDescriptor<ReviewedTripPlan>())
+        let persistedTrip = try #require(persistedTrips.first)
+        let persistedPlan = try #require(persistedPlans.first)
+
+        #expect(persistedPlans.count == 1)
+        #expect(persistedPlan.title == "Lisbon food weekend")
+        #expect(persistedTrip.itineraryItems.map(\.name) == ["Arrival", "Brunch", "Dinner"])
+        #expect(persistedTrip.itineraryItems[1].searchableDestination(in: persistedTrip) == "Brunch, Search by area, Lisbon")
+    }
+
+    @MainActor
+    @Test("Reviewed plan save validates title and named items", .bug("https://github.com/heathdj/TripPlanner/issues/8"))
+    func reviewedPlanSaveValidatesTitleAndNamedItems() throws {
+        let storeURL = temporaryStoreURL()
+        try removeStore(at: storeURL)
+        defer { try? removeStore(at: storeURL) }
+
+        let container = try makeContainer(at: storeURL)
+        let context = ModelContext(container)
+        let trip = Trip(
+            title: "Invalid",
+            location: "Test",
+            windowStartDate: date(year: 2026, month: 10, day: 1),
+            windowEndDate: date(year: 2026, month: 10, day: 3),
+            durationDays: 2
+        )
+        context.insert(trip)
+
+        #expect(throws: ReviewedTripPlanStore.ValidationError.missingTitle) {
+            try ReviewedTripPlanStore.saveReviewedPlan(
+                title: " ",
+                overview: "Overview",
+                items: [ItineraryItem(name: "Museum", category: .activity, dayNumber: 1)],
+                for: trip,
+                in: context
+            )
+        }
+
+        #expect(throws: ReviewedTripPlanStore.ValidationError.missingItems) {
+            try ReviewedTripPlanStore.saveReviewedPlan(
+                title: "Valid title",
+                overview: "Overview",
+                items: [ItineraryItem(name: " ", category: .activity, dayNumber: 1)],
+                for: trip,
+                in: context
+            )
+        }
+    }
+
     @Test("Destination suggestions combine title and subtitle cleanly")
     func destinationSuggestionsCombineTitleAndSubtitleCleanly() {
         let city = DestinationSuggestion(title: "Sydney", subtitle: "New South Wales, Australia")
