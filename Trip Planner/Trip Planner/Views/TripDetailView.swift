@@ -9,6 +9,7 @@ struct TripDetailView: View {
     @Query private var reviewedPlans: [ReviewedTripPlan]
     @AppStorage(TravelPreferencesStorage.Key.selectedInterestNames) private var selectedInterestNamesData = TravelPreferencesStorage.defaultSelectedInterestsData
     @AppStorage(TravelPreferencesStorage.Key.customInterestNames) private var customInterestNamesData = TravelPreferencesStorage.defaultCustomInterestsData
+    @AppStorage(TravelPreferencesStorage.Key.activationPromptState) private var activationPromptStateData = TravelPreferencesStorage.defaultActivationPromptStateData
     @State private var generatedDraft: TripPlanDraft?
     @State private var editablePlan = EditableTripPlan()
     @State private var isShowingReviewSheet = false
@@ -58,7 +59,11 @@ struct TripDetailView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         DetailHero(trip: trip, distanceSummary: distanceSummary)
                         TripFactsGrid(trip: trip, distanceSummary: distanceSummary)
-                        LifecycleSection(trip: trip, saveTripChanges: saveTripChanges)
+                        LifecycleSection(
+                            trip: trip,
+                            activationPromptStateData: $activationPromptStateData,
+                            saveTripChanges: saveTripChanges
+                        )
                         SavedPlanSection(plan: savedPlan)
                         GeneratedPlanSection(
                             status: tripPlanGenerator.status,
@@ -439,6 +444,7 @@ private struct TripFact: Identifiable {
 
 private struct LifecycleSection: View {
     let trip: Trip
+    @Binding var activationPromptStateData: String
     let saveTripChanges: () throws -> Void
 
     @State private var exactStartDate: Date
@@ -446,8 +452,13 @@ private struct LifecycleSection: View {
     @State private var pendingAction: LifecycleConfirmation?
     @State private var proposedActivationDate = Date.now
 
-    init(trip: Trip, saveTripChanges: @escaping () throws -> Void) {
+    init(
+        trip: Trip,
+        activationPromptStateData: Binding<String>,
+        saveTripChanges: @escaping () throws -> Void
+    ) {
         self.trip = trip
+        _activationPromptStateData = activationPromptStateData
         self.saveTripChanges = saveTripChanges
         _exactStartDate = State(initialValue: trip.exactStartDate ?? trip.windowStartDate)
     }
@@ -470,6 +481,13 @@ private struct LifecycleSection: View {
     private var scheduledEndDate: Date? {
         guard canEditSchedule else { return nil }
         return try? TripLifecycleService.previewExactEndDate(for: trip, exactStartDate: exactStartDate)
+    }
+
+    private var isActivationPromptSuppressed: Bool {
+        ActivationPromptEligibilityService.isSuppressed(
+            tripID: trip.id,
+            in: TravelPreferencesStorage.decodeActivationPromptState(from: activationPromptStateData)
+        )
     }
 
     private var isShowingError: Binding<Bool> {
@@ -552,6 +570,14 @@ private struct LifecycleSection: View {
                         .buttonStyle(.glass)
                         .accessibilityHint("Destructive action. Asks for confirmation before moving this trip to Closed Trips as cancelled")
                     }
+                }
+
+                if isActivationPromptSuppressed {
+                    Button("Ask Again for This Trip", systemImage: "bell.badge") {
+                        resetActivationPromptSuppression()
+                    }
+                    .buttonStyle(.glass)
+                    .accessibilityHint("Allows Trip Planner to show activation prompts for this trip again")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -648,6 +674,12 @@ private struct LifecycleSection: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func resetActivationPromptSuppression() {
+        let state = TravelPreferencesStorage.decodeActivationPromptState(from: activationPromptStateData)
+        let updatedState = ActivationPromptEligibilityService.resetSuppression(tripID: trip.id, in: state)
+        activationPromptStateData = TravelPreferencesStorage.encodeActivationPromptState(updatedState)
     }
 }
 

@@ -11,6 +11,10 @@ struct SettingsView: View {
     @AppStorage(TravelPreferencesStorage.Key.nearYouDistanceKilometers) private var nearYouDistanceKilometers = TravelSettings.defaultNearYouDistanceKilometers
     @AppStorage(TravelPreferencesStorage.Key.selectedInterestNames) private var selectedInterestNamesData = TravelPreferencesStorage.defaultSelectedInterestsData
     @AppStorage(TravelPreferencesStorage.Key.customInterestNames) private var customInterestNamesData = TravelPreferencesStorage.defaultCustomInterestsData
+    @AppStorage(TravelPreferencesStorage.Key.activationLeadTimeDays) private var activationLeadTimeDays = ActivationPromptEligibilityService.defaultLeadTimeDays
+    @AppStorage(TravelPreferencesStorage.Key.activationDatePromptsEnabled) private var activationDatePromptsEnabled = true
+    @AppStorage(TravelPreferencesStorage.Key.activationProximityPromptsEnabled) private var activationProximityPromptsEnabled = true
+    @AppStorage(TravelPreferencesStorage.Key.activationPromptState) private var activationPromptStateData = TravelPreferencesStorage.defaultActivationPromptStateData
 
     @State private var selectedIconName: String?
     @State private var iconErrorMessage: String?
@@ -54,6 +58,12 @@ struct SettingsView: View {
                                 defaultWindowLengthDays: $defaultWindowLengthDays,
                                 distanceUnitRawValue: $distanceUnitRawValue,
                                 nearYouDistanceKilometers: $nearYouDistanceKilometers
+                            )
+                            ActivationPromptsSettingsSection(
+                                activationLeadTimeDays: $activationLeadTimeDays,
+                                activationDatePromptsEnabled: $activationDatePromptsEnabled,
+                                activationProximityPromptsEnabled: $activationProximityPromptsEnabled,
+                                activationPromptStateData: $activationPromptStateData
                             )
                             ActivityInterestsSection(
                                 selectedInterestNamesData: $selectedInterestNamesData,
@@ -323,6 +333,65 @@ private struct DefaultsSection: View {
         case .miles:
             return 5...300
         }
+    }
+}
+
+private struct ActivationPromptsSettingsSection: View {
+    @Binding var activationLeadTimeDays: Int
+    @Binding var activationDatePromptsEnabled: Bool
+    @Binding var activationProximityPromptsEnabled: Bool
+    @Binding var activationPromptStateData: String
+
+    private var leadTimeDescription: String {
+        activationLeadTimeDays == 1 ? "1 day" : "\(activationLeadTimeDays) days"
+    }
+
+    var body: some View {
+        GlassPanel {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Activation Prompts")
+                    .font(.headline)
+                    .fontDesign(.rounded)
+
+                Toggle("Date-based prompts", isOn: $activationDatePromptsEnabled)
+
+                Stepper(value: leadTimeBinding, in: 0...14, step: 1) {
+                    LabeledContent("Advance notice", value: leadTimeDescription)
+                }
+                .disabled(activationDatePromptsEnabled == false)
+
+                Text("Use 0 days to prompt only once the trip start date arrives.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle("Nearby destination prompts", isOn: $activationProximityPromptsEnabled)
+
+                Text("Nearby prompts use your Near You distance and never block date-based prompts when location is unavailable.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button("Reset Suppressed Prompts", systemImage: "arrow.counterclockwise") {
+                    resetSuppressedPrompts()
+                }
+                .buttonStyle(.glass)
+                .accessibilityHint("Allows Trip Planner to ask again for trips where Don't Ask Again was selected")
+            }
+        }
+    }
+
+    private var leadTimeBinding: Binding<Int> {
+        Binding {
+            activationLeadTimeDays
+        } set: { newValue in
+            activationLeadTimeDays = max(0, newValue)
+        }
+    }
+
+    private func resetSuppressedPrompts() {
+        let state = TravelPreferencesStorage.decodeActivationPromptState(from: activationPromptStateData)
+        let updatedState = ActivationPromptEligibilityService.resetAllSuppressions(in: state)
+        activationPromptStateData = TravelPreferencesStorage.encodeActivationPromptState(updatedState)
     }
 }
 

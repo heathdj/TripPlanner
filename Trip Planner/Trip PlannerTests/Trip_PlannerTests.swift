@@ -339,6 +339,161 @@ struct TripPlannerFoundationTests {
     }
 
     @MainActor
+    @Test("Activation date prompts use lead time and trip dates", .bug("https://github.com/heathdj/TripPlanner/issues/51"))
+    func activationDatePromptsUseLeadTimeAndTripDates() throws {
+        let trip = trip(title: "Scheduled", startDay: 10, endDay: 20, status: .open)
+        try TripLifecycleService.setExactStartDate(localDate(year: 2026, month: 5, day: 10), for: trip)
+        trip.updateDuration(days: 3)
+
+        #expect(ActivationPromptEligibilityService.isDateEligible(
+            trip,
+            now: localDate(year: 2026, month: 5, day: 8),
+            leadTimeDays: 2,
+            isEnabled: true,
+            timeZone: .current
+        ))
+        #expect(ActivationPromptEligibilityService.isDateEligible(
+            trip,
+            now: localDate(year: 2026, month: 5, day: 12),
+            leadTimeDays: 0,
+            isEnabled: true,
+            timeZone: .current
+        ))
+        #expect(ActivationPromptEligibilityService.isDateEligible(
+            trip,
+            now: localDate(year: 2026, month: 5, day: 7),
+            leadTimeDays: 2,
+            isEnabled: true,
+            timeZone: .current
+        ) == false)
+        #expect(ActivationPromptEligibilityService.isDateEligible(
+            trip,
+            now: localDate(year: 2026, month: 5, day: 8),
+            leadTimeDays: 2,
+            isEnabled: false,
+            timeZone: .current
+        ) == false)
+    }
+
+    @MainActor
+    @Test("Activation date prompts use the destination time zone", .bug("https://github.com/heathdj/TripPlanner/issues/51"))
+    func activationDatePromptsUseDestinationTimeZone() throws {
+        let timeZone = try #require(TimeZone(identifier: "Pacific/Kiritimati"))
+        let trip = trip(title: "Time zone", startDay: 10, endDay: 20, status: .open)
+        try TripLifecycleService.setExactStartDate(localDate(year: 2026, month: 5, day: 10), for: trip)
+
+        let calendarDayInDestination = date(year: 2026, month: 5, day: 9, hour: 11, timeZone: TimeZone(secondsFromGMT: 0) ?? .current)
+
+        #expect(ActivationPromptEligibilityService.isDateEligible(
+            trip,
+            now: calendarDayInDestination,
+            leadTimeDays: 0,
+            isEnabled: true,
+            timeZone: timeZone
+        ))
+        #expect(ActivationPromptEligibilityService.isDateEligible(
+            trip,
+            now: calendarDayInDestination,
+            leadTimeDays: 0,
+            isEnabled: true,
+            timeZone: TimeZone(secondsFromGMT: 0) ?? .current
+        ) == false)
+    }
+
+    @MainActor
+    @Test("Activation proximity prompts use near you radius", .bug("https://github.com/heathdj/TripPlanner/issues/51"))
+    func activationProximityPromptsUseNearYouRadius() {
+        let userLocation = CLLocation(latitude: 41.8781, longitude: -87.6298)
+        let nearby = trip(title: "Nearby", startDay: 1, endDay: 4, status: .open, latitude: 41.8818, longitude: -87.6231)
+        let far = trip(title: "Far", startDay: 1, endDay: 4, status: .open, latitude: 40.7128, longitude: -74.0060)
+
+        #expect(ActivationPromptEligibilityService.proximityDistance(
+            for: nearby,
+            userLocation: userLocation,
+            nearYouDistanceKilometers: 10,
+            isEnabled: true
+        ) != nil)
+        #expect(ActivationPromptEligibilityService.proximityDistance(
+            for: far,
+            userLocation: userLocation,
+            nearYouDistanceKilometers: 10,
+            isEnabled: true
+        ) == nil)
+        #expect(ActivationPromptEligibilityService.proximityDistance(
+            for: nearby,
+            userLocation: userLocation,
+            nearYouDistanceKilometers: 10,
+            isEnabled: false
+        ) == nil)
+    }
+
+    @MainActor
+    @Test("Activation prompts honor cooldown and suppression", .bug("https://github.com/heathdj/TripPlanner/issues/51"))
+    func activationPromptsHonorCooldownAndSuppression() throws {
+        let trip = trip(title: "Prompt state", startDay: 10, endDay: 20, status: .open)
+        try TripLifecycleService.setExactStartDate(localDate(year: 2026, month: 5, day: 10), for: trip)
+        let now = localDate(year: 2026, month: 5, day: 8)
+        let dismissed = ActivationPromptEligibilityService.dismiss(
+            tripID: trip.id,
+            reasons: [.date],
+            at: now,
+            cooldownHours: 24,
+            in: ActivationPromptState()
+        )
+
+        #expect(ActivationPromptEligibilityService.candidate(
+            for: trip,
+            now: localDate(year: 2026, month: 5, day: 8),
+            userLocation: nil,
+            nearYouDistanceKilometers: 100,
+            leadTimeDays: 2,
+            datePromptsEnabled: true,
+            proximityPromptsEnabled: true,
+            state: dismissed
+        ) == nil)
+
+        let suppressed = ActivationPromptEligibilityService.suppress(
+            tripID: trip.id,
+            reasons: [.date],
+            at: now,
+            in: dismissed
+        )
+        #expect(ActivationPromptEligibilityService.isSuppressed(tripID: trip.id, in: suppressed))
+
+        let reset = ActivationPromptEligibilityService.resetSuppression(tripID: trip.id, in: suppressed)
+        #expect(ActivationPromptEligibilityService.isSuppressed(tripID: trip.id, in: reset) == false)
+    }
+
+    @MainActor
+    @Test("Combined date and proximity eligibility produces one prompt", .bug("https://github.com/heathdj/TripPlanner/issues/51"))
+    func combinedEligibilityProducesOnePrompt() throws {
+        let userLocation = CLLocation(latitude: 41.8781, longitude: -87.6298)
+        let trip = trip(
+            title: "Combined",
+            startDay: 10,
+            endDay: 20,
+            status: .open,
+            latitude: 41.8818,
+            longitude: -87.6231
+        )
+        try TripLifecycleService.setExactStartDate(localDate(year: 2026, month: 5, day: 10), for: trip)
+
+        let candidate = try #require(ActivationPromptEligibilityService.candidate(
+            for: trip,
+            now: localDate(year: 2026, month: 5, day: 8),
+            userLocation: userLocation,
+            nearYouDistanceKilometers: 100,
+            leadTimeDays: 2,
+            datePromptsEnabled: true,
+            proximityPromptsEnabled: true,
+            state: ActivationPromptState()
+        ))
+
+        #expect(candidate.trip.id == trip.id)
+        #expect(candidate.reasons == [.date, .proximity])
+    }
+
+    @MainActor
     @Test("Migrated lifecycle values are normalized safely", .bug("https://github.com/heathdj/TripPlanner/issues/49"))
     func migratedLifecycleValuesAreNormalizedSafely() {
         let migratedPlanned = trip(title: "Migrated planned", startDay: 1, endDay: 8, status: .open)
@@ -998,6 +1153,12 @@ struct TripPlannerFoundationTests {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         return calendar.date(from: DateComponents(year: year, month: month, day: day)) ?? .now
+    }
+
+    private func date(year: Int, month: Int, day: Int, hour: Int, timeZone: TimeZone) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour)) ?? .now
     }
 
     private func localDate(year: Int, month: Int, day: Int) -> Date {
