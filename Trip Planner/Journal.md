@@ -217,6 +217,12 @@ Issue `#52` makes launch feel less like opening a filing cabinet and more like w
 
 The important product promise is "front and center, not trapped." Every launch path includes a clear Go to Dashboard action that dismisses the experience without changing trip state, and the dashboard keeps a shortcut for reopening active trips later. The app also gives active-trip launch priority over activation prompts so two modal requests do not pile onto the screen like impatient clerks.
 
+### 2026-08-09: Issue #60 Removes the Dashboard Megaphone
+
+Issue `#60` cuts the standalone Flexible Travel Windows card from the dashboard. The app still stores, validates, edits, and displays travel-window dates where they help: trip creation, trip details, and trip cards. What disappeared was the big explanatory billboard that repeated the concept every time the traveler opened the dashboard.
+
+The lesson is that dashboard real estate should earn its rent. If a card does not help someone choose the next action, it becomes lobby furniture. Removing it also let us delete its private stat-pill helper and add a UI test that watches for the old copy staying gone while date context remains visible on real trip cards.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.
