@@ -58,16 +58,6 @@ struct DashboardView: View {
         tripGroups.plannedTrips
     }
 
-    private var currentTripCount: Int {
-        trips.filter { $0.status != .closed }.count
-    }
-
-    private var plannedItemTotal: Int {
-        trips.reduce(0) { total, trip in
-            total + trip.totalItineraryItemCount
-        }
-    }
-
     var body: some View {
         NavigationStack {
             ZStack {
@@ -76,12 +66,6 @@ struct DashboardView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
-                        HeroPanel(
-                            nextTrip: tripGroups.nearbyTrips.first?.trip ?? activeTrips.first ?? plannedTrips.first ?? openTrips.first,
-                            currentTripCount: currentTripCount,
-                            plannedItemTotal: plannedItemTotal
-                        )
-
                         if activeTrips.isEmpty == false {
                             ActiveTripShortcut(
                                 activeTripCount: activeTrips.count,
@@ -590,50 +574,6 @@ private struct ActiveTripLaunchChooser: View {
                     Button("Go to Dashboard") {
                         goToDashboard()
                         dismiss()
-                    }
-                }
-            }
-        }
-    }
-}
-
-private struct HeroPanel: View {
-    let nextTrip: Trip?
-    let currentTripCount: Int
-    let plannedItemTotal: Int
-
-    var body: some View {
-        GlassEffectContainer(spacing: 16) {
-            GlassPanel(cornerRadius: 28) {
-                VStack(alignment: .leading, spacing: 20) {
-                    Label("Flexible Travel Windows", systemImage: "calendar.badge.clock")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
-                    Text("Plan the trip length separately from when it can happen.")
-                        .font(.largeTitle.weight(.bold))
-                        .fontDesign(.rounded)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if let nextTrip {
-                        Text(nextTrip.highlight)
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    HStack(spacing: 12) {
-                        StatPill(
-                            title: "Current Trips",
-                            value: "\(currentTripCount)",
-                            systemImage: "suitcase.rolling.fill"
-                        )
-
-                        StatPill(
-                            title: "Planned Items",
-                            value: "\(plannedItemTotal)",
-                            systemImage: "list.bullet.clipboard.fill"
-                        )
                     }
                 }
             }

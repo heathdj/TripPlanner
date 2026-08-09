@@ -34,6 +34,18 @@ final class Trip_PlannerUITests: XCTestCase {
     }
 
     @MainActor
+    func testDashboardRemovesFlexibleTravelWindowCard() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        XCTAssertTrue(app.navigationBars["Trip Planner"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Flexible Travel Windows"].exists)
+        XCTAssertFalse(app.staticTexts["Plan the trip length separately from when it can happen."].exists)
+        XCTAssertTrue(app.staticTexts["Planned Trips"].exists)
+        XCTAssertGreaterThan(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "2026")).count, 0)
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {
