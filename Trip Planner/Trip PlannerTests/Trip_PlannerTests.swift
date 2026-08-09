@@ -848,6 +848,81 @@ struct TripPlannerFoundationTests {
     }
 
     @MainActor
+    @Test("Active trip launch sorting prioritizes current trips and start dates", .bug("https://github.com/heathdj/TripPlanner/issues/52"))
+    func activeTripLaunchSortingPrioritizesCurrentTripsAndStartDates() throws {
+        let currentLaterTitle = trip(title: "Zoo", startDay: 10, endDay: 14, status: .open)
+        let currentEarlierTitle = trip(title: "Aquarium", startDay: 10, endDay: 14, status: .open)
+        let olderActive = trip(title: "Older", startDay: 1, endDay: 5, status: .open)
+        let planned = trip(title: "Planned", startDay: 8, endDay: 12, status: .open)
+        let currentDate = localDate(year: 2026, month: 5, day: 10)
+
+        try TripLifecycleService.activate(olderActive, at: localDate(year: 2026, month: 5, day: 1))
+        try TripLifecycleService.activate(currentLaterTitle, at: currentDate)
+        try TripLifecycleService.activate(currentEarlierTitle, at: currentDate)
+        try TripLifecycleService.setExactStartDate(localDate(year: 2026, month: 5, day: 8), for: planned)
+
+        let sortedTrips = TripStore.sortedLaunchActiveTrips(
+            [currentLaterTitle, planned, olderActive, currentEarlierTitle],
+            on: currentDate
+        )
+
+        #expect(sortedTrips.map(\.title) == ["Aquarium", "Zoo", "Older"])
+    }
+
+    @MainActor
+    @Test("Active trip launch decisions are once per unblocked startup", .bug("https://github.com/heathdj/TripPlanner/issues/52"))
+    func activeTripLaunchDecisionsAreOncePerUnblockedStartup() throws {
+        let firstActive = trip(title: "First", startDay: 1, endDay: 6, status: .open)
+        let secondActive = trip(title: "Second", startDay: 3, endDay: 8, status: .open)
+        let open = trip(title: "Open", startDay: 4, endDay: 9, status: .open)
+        let currentDate = localDate(year: 2026, month: 5, day: 3)
+
+        try TripLifecycleService.activate(firstActive, at: localDate(year: 2026, month: 5, day: 1))
+        try TripLifecycleService.activate(secondActive, at: currentDate)
+
+        #expect(
+            TripStore.activeLaunchDecision(
+                for: [firstActive, open],
+                hasAlreadyPresented: false,
+                hasBlockingPresentation: false,
+                on: currentDate
+            ) == .single(firstActive.id)
+        )
+        #expect(
+            TripStore.activeLaunchDecision(
+                for: [secondActive, firstActive, open],
+                hasAlreadyPresented: false,
+                hasBlockingPresentation: false,
+                on: currentDate
+            ) == .chooser([secondActive.id, firstActive.id])
+        )
+        #expect(
+            TripStore.activeLaunchDecision(
+                for: [firstActive],
+                hasAlreadyPresented: true,
+                hasBlockingPresentation: false,
+                on: currentDate
+            ) == .none
+        )
+        #expect(
+            TripStore.activeLaunchDecision(
+                for: [firstActive],
+                hasAlreadyPresented: false,
+                hasBlockingPresentation: true,
+                on: currentDate
+            ) == .none
+        )
+        #expect(
+            TripStore.activeLaunchDecision(
+                for: [open],
+                hasAlreadyPresented: false,
+                hasBlockingPresentation: false,
+                on: currentDate
+            ) == .none
+        )
+    }
+
+    @MainActor
     @Test("Trip data and reviewed plans persist through SwiftData", .bug("https://github.com/heathdj/TripPlanner/issues/2"))
     func tripsSettingsAndReviewedPlansPersist() throws {
         let storeURL = temporaryStoreURL()

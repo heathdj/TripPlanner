@@ -211,6 +211,12 @@ The subtle engineering move was making the new Codable fields kind to old saved 
 
 The UI follows the lifecycle boundary. Open and planned trips still measure exact-place planning progress, while active and closed trips show completion progress. Only active trips get Done, Skip, and Undo actions, and the edit sheet lets travelers correct the completion time because "I did this at 2 PM" is a travel fact, not a guess.
 
+### 2026-08-09: Issue #52 Puts Active Trips at the Front Door
+
+Issue `#52` makes launch feel less like opening a filing cabinet and more like walking into an airport with your current boarding pass already pulled up. If there is one active trip, Trip Planner opens it once after startup. If there are several, it shows a chooser sorted so trips that are actually current today come first, then by start date and title.
+
+The important product promise is "front and center, not trapped." Every launch path includes a clear Go to Dashboard action that dismisses the experience without changing trip state, and the dashboard keeps a shortcut for reopening active trips later. The app also gives active-trip launch priority over activation prompts so two modal requests do not pile onto the screen like impatient clerks.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

@@ -24,6 +24,8 @@ struct TripDetailView: View {
     var userLocation: CLLocation?
     var nearYouDistanceKilometers = TravelSettings.defaultNearYouDistanceKilometers
     var startsGeneratingDraftOnAppear = false
+    var dismissButtonTitle = "Done"
+    var showsProminentDismissButton = false
     var tripPlanGenerator: any TripPlanGenerating = FoundationModelsTripPlanGenerator()
     var generatedTripSaved: (Trip) -> Void = { _ in }
 
@@ -58,6 +60,13 @@ struct TripDetailView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         DetailHero(trip: trip, distanceSummary: distanceSummary)
+                        if showsProminentDismissButton && isGeneratedTripFlow == false {
+                            Button(dismissButtonTitle, systemImage: "rectangle.grid.2x2.fill") {
+                                dismiss()
+                            }
+                            .buttonStyle(.glassProminent)
+                            .accessibilityHint("Returns to the dashboard without changing trip state")
+                        }
                         TripFactsGrid(trip: trip, distanceSummary: distanceSummary)
                         LifecycleSection(
                             trip: trip,
@@ -97,7 +106,7 @@ struct TripDetailView: View {
                             cancelGeneratedTrip()
                         }
                     } else {
-                        Button("Done") {
+                        Button(dismissButtonTitle) {
                             dismiss()
                         }
                     }

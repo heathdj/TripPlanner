@@ -23,6 +23,8 @@ struct DashboardView: View {
     @State private var pendingLifecycleAction: DashboardLifecycleAction?
     @State private var pendingActivationPrompt: ActivationPromptCandidate?
     @State private var didEvaluateLaunchPrompt = false
+    @State private var didEvaluateActiveLaunchExperience = false
+    @State private var activeLaunchPresentation: ActiveLaunchPresentation?
 
     private let columns = [
         GridItem(.adaptive(minimum: 280), spacing: 16)
@@ -79,6 +81,13 @@ struct DashboardView: View {
                             currentTripCount: currentTripCount,
                             plannedItemTotal: plannedItemTotal
                         )
+
+                        if activeTrips.isEmpty == false {
+                            ActiveTripShortcut(
+                                activeTripCount: activeTrips.count,
+                                openActiveTrips: presentActiveTripExperience
+                            )
+                        }
 
                         TripSection(
                             title: "Active Trips",
@@ -146,6 +155,30 @@ struct DashboardView: View {
                 }
             }
         }
+        .sheet(item: $activeLaunchPresentation, onDismiss: activeLaunchDidDismiss) { presentation in
+            switch presentation {
+            case .single(let trip):
+                TripDetailView(
+                    trip: trip,
+                    distanceSummary: distanceSummary(for: trip),
+                    userLocation: locationService.currentLocation,
+                    nearYouDistanceKilometers: nearYouDistanceKilometers,
+                    dismissButtonTitle: "Go to Dashboard",
+                    showsProminentDismissButton: true,
+                    generatedTripSaved: saveGeneratedTrip
+                )
+            case .chooser(let trips):
+                ActiveTripLaunchChooser(
+                    trips: trips,
+                    openTrip: { trip in
+                        activeLaunchPresentation = .single(trip)
+                    },
+                    goToDashboard: {
+                        activeLaunchPresentation = nil
+                    }
+                )
+            }
+        }
         .sheet(isPresented: $isShowingNewTrip, onDismiss: openPendingCreatedTrip) {
             NewTripView(
                 defaultDurationDays: defaultDurationDays,
@@ -168,6 +201,7 @@ struct DashboardView: View {
         .task {
             normalizeMigratedLifecycles()
             locationService.requestAccessOrRefreshLocation()
+            evaluateActiveLaunchExperienceIfNeeded()
             evaluateActivationPromptIfNeeded()
         }
         .onChange(of: locationService.currentLocation?.timestamp) {
@@ -259,6 +293,9 @@ struct DashboardView: View {
     private func evaluateActivationPromptIfNeeded(allowsRepeatEvaluation: Bool = false) {
         guard pendingActivationPrompt == nil,
               pendingLifecycleAction == nil,
+              activeLaunchPresentation == nil,
+              presentedTrip == nil,
+              isShowingNewTrip == false,
               allowsRepeatEvaluation || didEvaluateLaunchPrompt == false
         else {
             return
@@ -287,6 +324,44 @@ struct DashboardView: View {
             )
         )
         pendingActivationPrompt = candidate
+    }
+
+    private func evaluateActiveLaunchExperienceIfNeeded() {
+        guard didEvaluateActiveLaunchExperience == false,
+              activeLaunchPresentation == nil,
+              pendingActivationPrompt == nil,
+              pendingLifecycleAction == nil,
+              presentedTrip == nil,
+              isShowingNewTrip == false
+        else {
+            return
+        }
+
+        let decision = TripStore.activeLaunchDecision(
+            for: trips,
+            hasAlreadyPresented: didEvaluateActiveLaunchExperience,
+            hasBlockingPresentation: false
+        )
+        let launchActiveTrips = TripStore.sortedLaunchActiveTrips(trips)
+        didEvaluateActiveLaunchExperience = true
+
+        switch decision {
+        case .none:
+            return
+        case .single, .chooser:
+            activeLaunchPresentation = ActiveLaunchPresentation(trips: launchActiveTrips)
+        }
+    }
+
+    private func presentActiveTripExperience() {
+        let launchActiveTrips = TripStore.sortedLaunchActiveTrips(trips)
+        guard launchActiveTrips.isEmpty == false else { return }
+
+        activeLaunchPresentation = ActiveLaunchPresentation(trips: launchActiveTrips)
+    }
+
+    private func activeLaunchDidDismiss() {
+        evaluateActivationPromptIfNeeded()
     }
 
     private func activatePromptedTrip(_ candidate: ActivationPromptCandidate) {
@@ -383,6 +458,29 @@ private struct PresentedTrip: Identifiable {
     }
 }
 
+private enum ActiveLaunchPresentation: Identifiable {
+    case single(Trip)
+    case chooser([Trip])
+
+    init(trips: [Trip]) {
+        if let onlyTrip = trips.first,
+           trips.count == 1 {
+            self = .single(onlyTrip)
+        } else {
+            self = .chooser(trips)
+        }
+    }
+
+    var id: String {
+        switch self {
+        case .single(let trip):
+            return "active-\(trip.id)"
+        case .chooser(let trips):
+            return "active-chooser-\(trips.map(\.id.uuidString).joined(separator: "-"))"
+        }
+    }
+}
+
 private struct DashboardLifecycleAction: Identifiable {
     let trip: Trip
     let proposedStartDate: Date
@@ -405,6 +503,97 @@ private struct DashboardLifecycleAction: Identifiable {
         }
 
         return "This moves \(trip.title) to Active Trips. You can have more than one active trip."
+    }
+}
+
+private struct ActiveTripShortcut: View {
+    let activeTripCount: Int
+    let openActiveTrips: () -> Void
+
+    var body: some View {
+        Button {
+            openActiveTrips()
+        } label: {
+            Label(title, systemImage: "play.circle.fill")
+                .font(.headline)
+                .fontDesign(.rounded)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+        }
+        .buttonStyle(.glassProminent)
+        .accessibilityHint("Opens the active trip launch experience without changing trip state")
+    }
+
+    private var title: String {
+        activeTripCount == 1 ? "Open Active Trip" : "Choose Active Trip"
+    }
+}
+
+private struct ActiveTripLaunchChooser: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let trips: [Trip]
+    let openTrip: (Trip) -> Void
+    let goToDashboard: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AmbientMapBackground()
+                    .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("\(trips.count) Active Trips", systemImage: "play.circle.fill")
+                                .font(.title2.weight(.bold))
+                                .fontDesign(.rounded)
+
+                            Text("Choose the trip you want to continue, or go to the dashboard to see everything.")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(trips) { trip in
+                                Button {
+                                    openTrip(trip)
+                                } label: {
+                                    TripSummaryCard(trip: trip.summary())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("\(trip.title), \(trip.location), \(trip.progressAccessibilityValue)")
+                                .accessibilityHint("Opens this active trip")
+                            }
+                        }
+
+                        Button("Go to Dashboard", systemImage: "rectangle.grid.2x2.fill") {
+                            goToDashboard()
+                            dismiss()
+                        }
+                        .buttonStyle(.glassProminent)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityHint("Dismisses this chooser without changing active trips")
+                    }
+                    .padding()
+                    .frame(maxWidth: 760)
+                    .frame(maxWidth: .infinity)
+                }
+                .scrollEdgeEffectStyle(.soft, for: .top)
+            }
+            .navigationTitle("Active Trips")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Go to Dashboard") {
+                        goToDashboard()
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
 
