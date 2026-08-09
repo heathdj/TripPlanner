@@ -662,7 +662,7 @@ private struct TripCardButton: View {
             trip.windowDisplayString,
             trip.durationDisplayString,
             trip.travelerDisplayString,
-            trip.progressDisplayString,
+            trip.progressAccessibilityValue,
             distanceSummary
         ]
             .compactMap { $0 }
@@ -729,7 +729,7 @@ private struct TripSummaryCard: View {
                     ProgressView(value: trip.progressFraction)
                         .tint(.teal)
                         .accessibilityLabel("Trip progress")
-                        .accessibilityValue(trip.progressSummary)
+                        .accessibilityValue(progressAccessibilityValue)
                 }
 
                 HStack {
@@ -757,6 +757,11 @@ private struct TripSummaryCard: View {
         }
 
         return trip.status.rawValue
+    }
+
+    private var progressAccessibilityValue: String {
+        let percentage = Int((trip.progressFraction * 100).rounded())
+        return "\(trip.progressSummary), \(percentage) percent"
     }
 }
 

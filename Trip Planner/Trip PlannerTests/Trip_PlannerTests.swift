@@ -97,6 +97,132 @@ struct TripPlannerFoundationTests {
     }
 
     @MainActor
+    @Test("Active trip item states drive completion progress", .bug("https://github.com/heathdj/TripPlanner/issues/13"))
+    func activeTripItemStatesDriveCompletionProgress() throws {
+        let doneAt = date(year: 2026, month: 6, day: 4, hour: 14, timeZone: TimeZone(secondsFromGMT: 0) ?? .current)
+        let trip = Trip(
+            title: "Active Progress",
+            location: "Rome",
+            windowStartDate: date(year: 2026, month: 6, day: 1),
+            windowEndDate: date(year: 2026, month: 6, day: 8),
+            durationDays: 4,
+            itineraryItems: [
+                ItineraryItem(name: "Hotel", category: .stay, dayNumber: 1, latitude: 41.9028, longitude: 12.4964),
+                ItineraryItem(name: "Museum", category: .activity, dayNumber: 2, latitude: 41.8902, longitude: 12.4922),
+                ItineraryItem(name: "Dinner", category: .food, dayNumber: 2),
+                ItineraryItem(name: "Walk", category: .activity, dayNumber: 3)
+            ]
+        )
+
+        try TripLifecycleService.activate(trip, at: date(year: 2026, month: 6, day: 1))
+        trip.itineraryItems[0].markCompleted(at: doneAt)
+        trip.itineraryItems[1].markCompleted(at: doneAt)
+        trip.itineraryItems[2].markSkipped()
+        trip.updateProgressFromItinerary()
+
+        #expect(trip.progressDisplayString == "2 of 4 done")
+        #expect(trip.progressAccessibilityValue == "2 of 4 done, 50 percent")
+        #expect(trip.progressFraction == 0.5)
+        #expect(trip.completedItemCount == 2)
+        #expect(trip.skippedActionableItemCount == 1)
+        #expect(trip.itineraryItems[0].completedAt == doneAt)
+
+        trip.itineraryItems[0].markPlanned()
+        trip.updateProgressFromItinerary()
+
+        #expect(trip.progressDisplayString == "1 of 4 done")
+        #expect(trip.progressFraction == 0.25)
+        #expect(trip.itineraryItems[0].completedAt == nil)
+    }
+
+    @MainActor
+    @Test("Planned trips keep plan progress separate from completion state", .bug("https://github.com/heathdj/TripPlanner/issues/13"))
+    func plannedTripsKeepPlanProgressSeparateFromCompletionState() {
+        let trip = Trip(
+            title: "Still Planning",
+            location: "Austin",
+            windowStartDate: date(year: 2026, month: 10, day: 1),
+            windowEndDate: date(year: 2026, month: 10, day: 8),
+            durationDays: 3,
+            status: .planned,
+            itineraryItems: [
+                ItineraryItem(name: "Exact hotel", category: .stay, dayNumber: 1, latitude: 30.249, longitude: -97.7495, completionState: .completed, completedAt: .now),
+                ItineraryItem(name: "Loose dinner", category: .food, dayNumber: 2)
+            ]
+        )
+
+        trip.updateProgressFromItinerary()
+
+        #expect(trip.progressDisplayString == "1 of 2 planned")
+        #expect(trip.progressFraction == 0.5)
+        #expect(trip.completedItemCount == 1)
+    }
+
+    @MainActor
+    @Test("Closed trips preserve item completion progress", .bug("https://github.com/heathdj/TripPlanner/issues/13"))
+    func closedTripsPreserveItemCompletionProgress() throws {
+        let trip = Trip(
+            title: "Closed Progress",
+            location: "Santa Fe",
+            windowStartDate: date(year: 2026, month: 3, day: 1),
+            windowEndDate: date(year: 2026, month: 3, day: 8),
+            durationDays: 4,
+            itineraryItems: [
+                ItineraryItem(name: "Museum", category: .activity, dayNumber: 1),
+                ItineraryItem(name: "Dinner", category: .food, dayNumber: 2)
+            ]
+        )
+
+        try TripLifecycleService.activate(trip, at: date(year: 2026, month: 3, day: 1))
+        trip.itineraryItems[0].markCompleted(at: date(year: 2026, month: 3, day: 2))
+        trip.updateProgressFromItinerary()
+        try TripLifecycleService.close(trip, outcome: .completed, at: date(year: 2026, month: 3, day: 5))
+
+        #expect(trip.progressDisplayString == "1 of 2 done")
+        #expect(trip.progressFraction == 0.5)
+        #expect(trip.summary().progressSummary == "1 of 2 done")
+    }
+
+    @MainActor
+    @Test("Active trip completion progress handles empty plans", .bug("https://github.com/heathdj/TripPlanner/issues/13"))
+    func activeTripCompletionProgressHandlesEmptyPlans() throws {
+        let trip = Trip(
+            title: "Empty Active",
+            location: "Chicago",
+            windowStartDate: date(year: 2026, month: 5, day: 1),
+            windowEndDate: date(year: 2026, month: 5, day: 6),
+            durationDays: 2
+        )
+
+        try TripLifecycleService.activate(trip, at: date(year: 2026, month: 5, day: 1))
+        trip.updateProgressFromItinerary()
+
+        #expect(trip.progressDisplayString == "0 of 0 done")
+        #expect(trip.progressAccessibilityValue == "0 of 0 done, 0 percent")
+        #expect(trip.progressFraction == 0)
+    }
+
+    @Test("Older itinerary item payloads decode with planned completion state", .bug("https://github.com/heathdj/TripPlanner/issues/13"))
+    func olderItineraryItemPayloadsDecodeWithPlannedCompletionState() throws {
+        let data = Data(
+            #"""
+            {
+                "id": "39B985D3-8E1E-4E57-8AE5-C3C1E1D58013",
+                "name": "Museum",
+                "notesOrAddress": "Main Street",
+                "category": "activity",
+                "dayNumber": 2
+            }
+            """#.utf8
+        )
+
+        let item = try JSONDecoder().decode(ItineraryItem.self, from: data)
+
+        #expect(item.completionState == .planned)
+        #expect(item.completedAt == nil)
+    }
+
+    @MainActor
     @Test("Itinerary items model directions data safely", .bug("https://github.com/heathdj/TripPlanner/issues/5"))
     func itineraryItemsModelDirectionsDataSafely() {
         let exact = ItineraryItem(
@@ -742,8 +868,19 @@ struct TripPlannerFoundationTests {
             completedItemCount: 2,
             travelerCount: 3,
             itineraryItems: [
-                ItineraryItem(name: "Museum morning", category: .activity, dayNumber: 1),
-                ItineraryItem(name: "Dinner reservation", category: .food, dayNumber: 2)
+                ItineraryItem(
+                    name: "Museum morning",
+                    category: .activity,
+                    dayNumber: 1,
+                    completionState: .completed,
+                    completedAt: localDate(year: 2026, month: 3, day: 6)
+                ),
+                ItineraryItem(
+                    name: "Dinner reservation",
+                    category: .food,
+                    dayNumber: 2,
+                    completionState: .skipped
+                )
             ],
             exactStartDate: localDate(year: 2026, month: 3, day: 5),
             activatedAt: localDate(year: 2026, month: 3, day: 5),
@@ -786,6 +923,9 @@ struct TripPlannerFoundationTests {
         #expect(persistedTrip.travelerDisplayString == "3 travelers")
         #expect(persistedTrip.itineraryItems.map(\.name) == ["Museum morning", "Dinner reservation"])
         #expect(persistedTrip.itineraryItems.map(\.category) == [.activity, .food])
+        #expect(persistedTrip.itineraryItems.map(\.completionState) == [.completed, .skipped])
+        #expect(persistedTrip.itineraryItems.first?.completedAt == localDate(year: 2026, month: 3, day: 6))
+        #expect(persistedTrip.progressDisplayString == "1 of 2 done")
         #expect(persistedSetting.defaultDurationDays == 14)
         #expect(persistedSetting.defaultWindowLengthDays == 45)
         #expect(persistedSetting.distanceUnit == .kilometers)
