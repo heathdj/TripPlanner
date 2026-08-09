@@ -2,18 +2,18 @@ import Foundation
 
 enum TravelPreferencesStorage {
     enum Key {
-        static let defaultDurationDays = "travelPreferences.defaultDurationDays"
-        static let defaultWindowLengthDays = "travelPreferences.defaultWindowLengthDays"
-        static let distanceUnit = "travelPreferences.distanceUnit"
-        static let nearYouDistanceKilometers = "travelPreferences.nearYouDistanceKilometers"
-        static let selectedInterestNames = "travelPreferences.selectedInterestNames"
-        static let customInterestNames = "travelPreferences.customInterestNames"
+        nonisolated static let defaultDurationDays = "travelPreferences.defaultDurationDays"
+        nonisolated static let defaultWindowLengthDays = "travelPreferences.defaultWindowLengthDays"
+        nonisolated static let distanceUnit = "travelPreferences.distanceUnit"
+        nonisolated static let nearYouDistanceKilometers = "travelPreferences.nearYouDistanceKilometers"
+        nonisolated static let selectedInterestNames = "travelPreferences.selectedInterestNames"
+        nonisolated static let customInterestNames = "travelPreferences.customInterestNames"
     }
 
-    static let defaultSelectedInterestsData = "[]"
-    static let defaultCustomInterestsData = "[]"
+    nonisolated static let defaultSelectedInterestsData = "[]"
+    nonisolated static let defaultCustomInterestsData = "[]"
 
-    static func decodeInterests(from data: String) -> [String] {
+    nonisolated static func decodeInterests(from data: String) -> [String] {
         guard let jsonData = data.data(using: .utf8),
               let interests = try? JSONDecoder().decode([String].self, from: jsonData)
         else {
@@ -23,7 +23,7 @@ enum TravelPreferencesStorage {
         return normalizedInterests(from: interests)
     }
 
-    static func encodeInterests(_ interests: [String]) -> String {
+    nonisolated static func encodeInterests(_ interests: [String]) -> String {
         let normalized = normalizedInterests(from: interests)
         guard let data = try? JSONEncoder().encode(normalized),
               let string = String(data: data, encoding: .utf8)
@@ -34,17 +34,17 @@ enum TravelPreferencesStorage {
         return string
     }
 
-    static func visibleSelectedInterests(selected: [String], custom: [String]) -> [String] {
+    nonisolated static func visibleSelectedInterests(selected: [String], custom: [String]) -> [String] {
         let builtIns = ActivityInterestCatalog.builtInInterests.filter { isInterestSelected($0, selected: selected) }
         let selectedCustom = custom.filter { isInterestSelected($0, selected: selected) }
         return builtIns + selectedCustom
     }
 
-    static func isInterestSelected(_ interest: String, selected: [String]) -> Bool {
+    nonisolated static func isInterestSelected(_ interest: String, selected: [String]) -> Bool {
         selected.contains { $0.localizedCaseInsensitiveCompare(interest) == .orderedSame }
     }
 
-    static func toggledInterest(_ interest: String, selected: [String]) -> [String] {
+    nonisolated static func toggledInterest(_ interest: String, selected: [String]) -> [String] {
         let normalized = interest.trimmingCharacters(in: .whitespacesAndNewlines)
         guard normalized.isEmpty == false else { return normalizedInterests(from: selected) }
 
@@ -58,7 +58,7 @@ enum TravelPreferencesStorage {
         return interests
     }
 
-    static func addingCustomInterest(
+    nonisolated static func addingCustomInterest(
         _ interest: String,
         selected: [String],
         custom: [String]
@@ -82,7 +82,7 @@ enum TravelPreferencesStorage {
         return (selectedInterests, customInterests)
     }
 
-    static func removingCustomInterest(
+    nonisolated static func removingCustomInterest(
         _ interest: String,
         selected: [String],
         custom: [String]
@@ -95,7 +95,7 @@ enum TravelPreferencesStorage {
         return (selectedInterests, customInterests)
     }
 
-    static func normalizedInterests(from interests: [String]) -> [String] {
+    nonisolated static func normalizedInterests(from interests: [String]) -> [String] {
         interests.reduce(into: [String]()) { result, interest in
             let normalized = interest.trimmingCharacters(in: .whitespacesAndNewlines)
             guard normalized.isEmpty == false,

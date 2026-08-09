@@ -104,6 +104,10 @@ final class Trip {
         return "\(exactStartDate.formatted(date: .abbreviated, time: .omitted))-\(exactEndDate.formatted(date: .abbreviated, time: .omitted))"
     }
 
+    var closedOutcomeDisplayString: String? {
+        effectiveClosedOutcome?.rawValue
+    }
+
     var effectiveClosedOutcome: ClosedTripOutcome? {
         guard status == .closed else { return nil }
         return closedOutcome ?? .completed
@@ -183,6 +187,7 @@ final class Trip {
             durationSummary: durationDisplayString,
             startDateSummary: exactStartDate == nil ? startDateDisplayString : exactDateDisplayString,
             status: status,
+            closedOutcomeSummary: closedOutcomeDisplayString,
             highlight: highlight,
             plannedItemCount: totalItineraryItemCount,
             completedItemCount: effectivePlannedItemCount,
@@ -200,7 +205,7 @@ final class Trip {
     }
 }
 
-enum TripLifecycleService {
+nonisolated enum TripLifecycleService {
     enum ValidationError: LocalizedError, Equatable {
         case startDateOutsideWindow
         case tripDoesNotFitWindow
@@ -257,6 +262,13 @@ enum TripLifecycleService {
     static func activate(_ trip: Trip, at date: Date = .now) throws {
         guard trip.status == .open || trip.status == .planned else {
             throw ValidationError.cannotActivate
+        }
+
+        if trip.exactStartDate == nil {
+            let calendar = Calendar.current
+            let normalizedDate = calendar.startOfDay(for: date)
+            _ = try validatedEndDate(for: trip, exactStartDate: normalizedDate, calendar: calendar)
+            trip.exactStartDate = normalizedDate
         }
 
         trip.status = .active

@@ -111,8 +111,10 @@ final class LocationService: NSObject {
 
 extension LocationService: CLLocationManagerDelegate {
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let updatedAuthorizationStatus = manager.authorizationStatus
+
         Task { @MainActor in
-            authorizationStatus = manager.authorizationStatus
+            authorizationStatus = updatedAuthorizationStatus
 
             if canUseLocation {
                 isRequestingLocation = false
@@ -127,7 +129,7 @@ extension LocationService: CLLocationManagerDelegate {
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         Task { @MainActor in
-            manager.stopUpdatingLocation()
+            self.manager.stopUpdatingLocation()
             currentLocation = locations.last
             isRequestingLocation = false
             errorMessage = nil
@@ -136,7 +138,7 @@ extension LocationService: CLLocationManagerDelegate {
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: any Error) {
         Task { @MainActor in
-            manager.stopUpdatingLocation()
+            self.manager.stopUpdatingLocation()
             isRequestingLocation = false
             errorMessage = error.localizedDescription
         }

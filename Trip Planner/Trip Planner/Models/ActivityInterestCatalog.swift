@@ -1,7 +1,7 @@
 import Foundation
 
 enum ActivityInterestCatalog {
-    static let builtInInterests = [
+    nonisolated static let builtInInterests = [
         "Museums",
         "Hikes",
         "Live Events",

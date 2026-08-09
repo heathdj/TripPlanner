@@ -298,26 +298,44 @@ struct TripPlannerFoundationTests {
     }
 
     @MainActor
-    @Test("Active and closed transitions require explicit service calls", .bug("https://github.com/heathdj/TripPlanner/issues/49"))
+    @Test("Active and closed transitions require explicit service calls", .bug("https://github.com/heathdj/TripPlanner/issues/50"))
     func activeAndClosedTransitionsRequireExplicitServiceCalls() throws {
         let activeTrip = trip(title: "Active one", startDay: 1, endDay: 8, status: .open)
         let secondActiveTrip = trip(title: "Active two", startDay: 3, endDay: 10, status: .open)
         let activationDate = localDate(year: 2026, month: 5, day: 1)
+        let secondActivationDate = localDate(year: 2026, month: 5, day: 3)
         let closeDate = localDate(year: 2026, month: 5, day: 6)
 
         try TripLifecycleService.activate(activeTrip, at: activationDate)
-        try TripLifecycleService.activate(secondActiveTrip, at: activationDate)
+        try TripLifecycleService.activate(secondActiveTrip, at: secondActivationDate)
         try TripLifecycleService.close(activeTrip, outcome: .cancelled, at: closeDate)
 
         #expect(activeTrip.status == .closed)
+        #expect(activeTrip.exactStartDate == activationDate)
         #expect(activeTrip.activatedAt == activationDate)
         #expect(activeTrip.closedAt == closeDate)
         #expect(activeTrip.closedOutcome == .cancelled)
         #expect(activeTrip.effectiveClosedOutcome == .cancelled)
+        #expect(activeTrip.summary().closedOutcomeSummary == "Cancelled")
         #expect(secondActiveTrip.status == .active)
+        #expect(secondActiveTrip.exactStartDate == secondActivationDate)
         #expect(throws: TripLifecycleService.ValidationError.cannotActivate) {
             try TripLifecycleService.activate(activeTrip)
         }
+    }
+
+    @MainActor
+    @Test("Undated activation must fit the flexible window", .bug("https://github.com/heathdj/TripPlanner/issues/50"))
+    func undatedActivationMustFitFlexibleWindow() {
+        let trip = trip(title: "Not today", startDay: 1, endDay: 4, status: .open)
+
+        #expect(throws: TripLifecycleService.ValidationError.startDateOutsideWindow) {
+            try TripLifecycleService.activate(trip, at: localDate(year: 2026, month: 4, day: 29))
+        }
+
+        #expect(trip.status == .open)
+        #expect(trip.exactStartDate == nil)
+        #expect(trip.activatedAt == nil)
     }
 
     @MainActor
@@ -459,8 +477,8 @@ struct TripPlannerFoundationTests {
     }
 
     @MainActor
-    @Test("Nearby grouping promotes current trips inside the radius", .bug("https://github.com/heathdj/TripPlanner/issues/49"))
-    func nearbyGroupingPromotesCurrentTripsInsideRadius() throws {
+    @Test("Nearby grouping promotes planned and open trips inside the radius", .bug("https://github.com/heathdj/TripPlanner/issues/50"))
+    func nearbyGroupingPromotesPlannedAndOpenTripsInsideRadius() throws {
         let userLocation = CLLocation(latitude: 41.8781, longitude: -87.6298)
         let nearbyOpen = trip(
             title: "Nearby",
@@ -511,10 +529,10 @@ struct TripPlannerFoundationTests {
             nearYouDistanceKilometers: 100
         )
 
-        #expect(groups.nearbyTrips.map(\.trip.title) == ["Nearby", "Nearby Active", "Nearby Planned"])
+        #expect(groups.nearbyTrips.map(\.trip.title) == ["Nearby", "Nearby Planned"])
         #expect(groups.openTrips.map(\.title) == ["Far"])
         #expect(groups.plannedTrips.isEmpty)
-        #expect(groups.activeTrips.isEmpty)
+        #expect(groups.activeTrips.map(\.title) == ["Nearby Active"])
         #expect(groups.closedTrips.map(\.title) == ["Closed nearby"])
     }
 

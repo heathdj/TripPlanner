@@ -5,9 +5,9 @@ enum DistanceUnit: String, CaseIterable, Identifiable, Codable, Sendable {
     case kilometers
     case miles
 
-    var id: String { rawValue }
+    nonisolated var id: String { rawValue }
 
-    var displayName: String {
+    nonisolated var displayName: String {
         switch self {
         case .kilometers:
             return "Kilometers"
@@ -16,7 +16,7 @@ enum DistanceUnit: String, CaseIterable, Identifiable, Codable, Sendable {
         }
     }
 
-    var symbol: String {
+    nonisolated var symbol: String {
         switch self {
         case .kilometers:
             return "km"
@@ -25,7 +25,7 @@ enum DistanceUnit: String, CaseIterable, Identifiable, Codable, Sendable {
         }
     }
 
-    func kilometers(from value: Double) -> Double {
+    nonisolated func kilometers(from value: Double) -> Double {
         switch self {
         case .kilometers:
             return value
@@ -34,7 +34,7 @@ enum DistanceUnit: String, CaseIterable, Identifiable, Codable, Sendable {
         }
     }
 
-    func value(fromKilometers kilometers: Double) -> Double {
+    nonisolated func value(fromKilometers kilometers: Double) -> Double {
         switch self {
         case .kilometers:
             return kilometers
@@ -43,7 +43,7 @@ enum DistanceUnit: String, CaseIterable, Identifiable, Codable, Sendable {
         }
     }
 
-    func formattedDistance(meters: Double) -> String {
+    nonisolated func formattedDistance(meters: Double) -> String {
         let kilometers = meters / 1_000
         let value = value(fromKilometers: kilometers)
         let roundedValue = value >= 10 ? value.rounded() : (value * 10).rounded() / 10

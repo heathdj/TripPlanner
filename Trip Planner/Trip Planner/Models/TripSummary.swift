@@ -1,6 +1,6 @@
 import Foundation
 
-struct TripSummary: Identifiable, Hashable, Sendable {
+nonisolated struct TripSummary: Identifiable, Hashable, Sendable {
     let id: UUID
     var title: String
     var location: String
@@ -8,6 +8,7 @@ struct TripSummary: Identifiable, Hashable, Sendable {
     var durationSummary: String
     var startDateSummary: String
     var status: TripStatus
+    var closedOutcomeSummary: String?
     var highlight: String
     var plannedItemCount: Int
     var completedItemCount: Int
@@ -23,6 +24,7 @@ struct TripSummary: Identifiable, Hashable, Sendable {
         durationSummary: String,
         startDateSummary: String,
         status: TripStatus,
+        closedOutcomeSummary: String? = nil,
         highlight: String,
         plannedItemCount: Int,
         completedItemCount: Int = 0,
@@ -37,6 +39,7 @@ struct TripSummary: Identifiable, Hashable, Sendable {
         self.durationSummary = durationSummary
         self.startDateSummary = startDateSummary
         self.status = status
+        self.closedOutcomeSummary = closedOutcomeSummary
         self.highlight = highlight
         self.plannedItemCount = plannedItemCount
         self.completedItemCount = completedItemCount

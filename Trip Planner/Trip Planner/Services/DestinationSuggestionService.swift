@@ -2,7 +2,7 @@ import CoreLocation
 import Foundation
 import MapKit
 
-struct DestinationSuggestion: Hashable, Identifiable, Sendable {
+nonisolated struct DestinationSuggestion: Hashable, Identifiable, Sendable {
     let title: String
     let subtitle: String
 
@@ -18,7 +18,7 @@ struct DestinationSuggestion: Hashable, Identifiable, Sendable {
     }
 }
 
-struct ActivityPlaceSuggestion: Hashable, Identifiable, Sendable {
+nonisolated struct ActivityPlaceSuggestion: Hashable, Identifiable, Sendable {
     let title: String
     let subtitle: String
     var address: String = ""

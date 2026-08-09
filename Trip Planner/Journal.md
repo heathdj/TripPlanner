@@ -187,6 +187,14 @@ Second follow-up bug: "plan progress" was too vague because it counted a stored 
 
 Third follow-up bug: action buttons inside rich itinerary cards tried to share one skinny row on compact phones, so labels like Directions and Refresh folded into letter towers. The fix was to make the actions a responsive grid with one-line labels, letting buttons wrap as whole controls instead of crushing the text.
 
+### 2026-08-08: Issue #50 Makes Lifecycle Controls Obvious
+
+Issue `#50` turned the lifecycle state machine into controls a traveler can actually understand. Open trips now say "Set Exact Dates" and show the calculated end date before saving. Planned trips can clear that exact date and fall back to open. Open and planned trips can become active from the detail screen or dashboard cards, while active trips get a distinct "Finish Trip" action. Cancelling is explicit and destructive wherever it appears.
+
+The dashboard now reads like an operations board: Active first, then Near You as a proximity spotlight, then Planned, Open, and Closed. Active trips no longer disappear into the nearby bucket, and closed cards show whether the trip was completed or cancelled.
+
+Build war story: Swift 6 with default MainActor isolation is strict about even harmless-looking value helpers. Pure values like distance units, suggestions, summaries, and generated-plan statuses needed to opt out of UI isolation so SwiftData models and Swift Testing macros could use them without pretending they belong to the main actor. The fix was not to slap `@MainActor` everywhere; it was to mark pure helpers `nonisolated` and keep UI-owned services on the main actor.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

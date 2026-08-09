@@ -91,7 +91,7 @@ enum TripStore {
         let plannedTrips = sortedPlannedTrips(trips)
         let activeTrips = sortedActiveTrips(trips)
         let closedTrips = sortedClosedTrips(trips)
-        let currentTrips = activeTrips + plannedTrips + openTrips
+        let proximityCandidates = plannedTrips + openTrips
 
         guard let userLocation else {
             return TripGroups(
@@ -104,7 +104,7 @@ enum TripStore {
         }
 
         let radiusMeters = max(1, nearYouDistanceKilometers) * 1_000
-        let nearbyTrips = currentTrips
+        let nearbyTrips = proximityCandidates
             .compactMap { trip -> NearbyTrip? in
                 guard let distanceMeters = distanceMeters(from: userLocation, to: trip),
                       distanceMeters <= radiusMeters
