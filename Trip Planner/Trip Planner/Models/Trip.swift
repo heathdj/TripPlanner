@@ -118,12 +118,26 @@ final class Trip {
     }
 
     var progressDisplayString: String {
-        "\(effectivePlannedItemCount) of \(totalItineraryItemCount) planned"
+        if usesCompletionProgress {
+            return "\(completedActionableItemCount) of \(totalActionableItemCount) done"
+        }
+
+        return "\(effectivePlannedItemCount) of \(totalItineraryItemCount) planned"
     }
 
     var progressFraction: Double {
+        if usesCompletionProgress {
+            guard totalActionableItemCount > 0 else { return 0 }
+            return Double(completedActionableItemCount) / Double(totalActionableItemCount)
+        }
+
         guard totalItineraryItemCount > 0 else { return 0 }
         return Double(effectivePlannedItemCount) / Double(totalItineraryItemCount)
+    }
+
+    var progressAccessibilityValue: String {
+        let percentage = Int((progressFraction * 100).rounded())
+        return "\(progressDisplayString), \(percentage) percent"
     }
 
     var totalItineraryItemCount: Int {
@@ -136,6 +150,26 @@ final class Trip {
         }
 
         return itineraryItems.filter(\.hasCoordinate).count
+    }
+
+    var usesCompletionProgress: Bool {
+        status == .active || status == .closed
+    }
+
+    var totalActionableItemCount: Int {
+        itineraryItems.isEmpty ? plannedItemCount : itineraryItems.count
+    }
+
+    var completedActionableItemCount: Int {
+        guard itineraryItems.isEmpty == false else {
+            return completedItemCount
+        }
+
+        return itineraryItems.filter(\.isCompleted).count
+    }
+
+    var skippedActionableItemCount: Int {
+        itineraryItems.filter(\.isSkipped).count
     }
 
     func updateWindow(start: Date, end: Date, calendar: Calendar = .current) {
@@ -167,7 +201,7 @@ final class Trip {
 
     func updateProgressFromItinerary() {
         updateProgress(
-            completedItems: itineraryItems.filter(\.hasCoordinate).count,
+            completedItems: usesCompletionProgress ? itineraryItems.filter(\.isCompleted).count : itineraryItems.filter(\.hasCoordinate).count,
             plannedItems: itineraryItems.count
         )
     }
@@ -189,8 +223,8 @@ final class Trip {
             status: status,
             closedOutcomeSummary: closedOutcomeDisplayString,
             highlight: highlight,
-            plannedItemCount: totalItineraryItemCount,
-            completedItemCount: effectivePlannedItemCount,
+            plannedItemCount: usesCompletionProgress ? totalActionableItemCount : totalItineraryItemCount,
+            completedItemCount: usesCompletionProgress ? completedActionableItemCount : effectivePlannedItemCount,
             travelerSummary: travelerDisplayString,
             progressSummary: progressDisplayString,
             progressFraction: progressFraction

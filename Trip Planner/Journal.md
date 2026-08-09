@@ -203,6 +203,14 @@ The prompt state lives in AppStorage because it is preference-like memory: last 
 
 The date math is deliberately calendar-based and time-zone aware. Travel days are not stopwatch intervals; they are local calendar days at the destination. The service accepts a destination time zone and falls back gracefully when location is denied, stale, or unavailable, so date prompts never depend on location permission.
 
+### 2026-08-09: Issue #13 Turns Active Trips Into Checklists
+
+Issue `#13` changes progress from "how complete is this plan?" to "how much of this active trip is done?" once the traveler starts moving. Itinerary items now have three small but important states: planned, done, and skipped. Done items carry a timestamp, skipped items stay visibly skipped, and the progress bar counts `done / total` so a skipped stop never pretends to be completed.
+
+The subtle engineering move was making the new Codable fields kind to old saved trips. Older itinerary payloads do not know what a completion state is, so decoding defaults them to planned instead of blowing up the trip store. That is the difference between adding a drawer to the kitchen and accidentally locking everyone out of the house.
+
+The UI follows the lifecycle boundary. Open and planned trips still measure exact-place planning progress, while active and closed trips show completion progress. Only active trips get Done, Skip, and Undo actions, and the edit sheet lets travelers correct the completion time because "I did this at 2 PM" is a travel fact, not a guess.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

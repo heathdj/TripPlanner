@@ -78,7 +78,8 @@ struct TripDetailView: View {
                             trip: trip,
                             items: trip.itineraryItems,
                             refreshItem: refreshPlaceDetails,
-                            editItem: editItineraryItem
+                            editItem: editItineraryItem,
+                            updateCompletionState: updateItineraryItemCompletionState
                         )
                     }
                     .padding()
@@ -278,6 +279,32 @@ struct TripDetailView: View {
         try modelContext.save()
     }
 
+    private func updateItineraryItemCompletionState(
+        _ item: ItineraryItem,
+        to state: ItineraryItemCompletionState,
+        completedAt: Date = .now
+    ) {
+        guard trip.status == .active,
+              let itemIndex = trip.itineraryItems.firstIndex(where: { $0.id == item.id })
+        else {
+            return
+        }
+
+        var updatedItem = trip.itineraryItems[itemIndex]
+        switch state {
+        case .planned:
+            updatedItem.markPlanned()
+        case .completed:
+            updatedItem.markCompleted(at: completedAt)
+        case .skipped:
+            updatedItem.markSkipped()
+        }
+
+        trip.itineraryItems[itemIndex] = updatedItem
+        trip.updateProgressFromItinerary()
+        try? modelContext.save()
+    }
+
     private func enrichedPlan(from draft: TripPlanDraft) async -> EditableTripPlan {
         var plan = EditableTripPlan(draft: draft)
         var enrichedItems = [EditableItineraryItem]()
@@ -353,13 +380,13 @@ private struct DetailHero: View {
 
                     ProgressView(value: trip.progressFraction)
                         .tint(.teal)
-                        .accessibilityLabel("Plan progress")
-                        .accessibilityValue(trip.progressDisplayString)
+                        .accessibilityLabel(trip.usesCompletionProgress ? "Trip completion progress" : "Plan progress")
+                        .accessibilityValue(trip.progressAccessibilityValue)
                 }
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(trip.title), \(trip.location), \(trip.status.rawValue), \(trip.progressDisplayString)")
+        .accessibilityLabel("\(trip.title), \(trip.location), \(trip.status.rawValue), \(trip.progressAccessibilityValue)")
     }
 
     private var heroGradient: LinearGradient {
@@ -994,6 +1021,8 @@ private struct EditableItineraryItem: Identifiable {
     var placeCost: PlaceDetailValue?
     var placeTimeZoneIdentifier: String?
     var placeAttribution: PlaceDetailValue?
+    var completionState: ItineraryItemCompletionState
+    var completedAt: Date?
 
     nonisolated init(
         id: UUID = UUID(),
@@ -1013,7 +1042,9 @@ private struct EditableItineraryItem: Identifiable {
         placeHours: PlaceDetailValue? = nil,
         placeCost: PlaceDetailValue? = nil,
         placeTimeZoneIdentifier: String? = nil,
-        placeAttribution: PlaceDetailValue? = nil
+        placeAttribution: PlaceDetailValue? = nil,
+        completionState: ItineraryItemCompletionState = .planned,
+        completedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -1033,6 +1064,8 @@ private struct EditableItineraryItem: Identifiable {
         self.placeCost = placeCost
         self.placeTimeZoneIdentifier = placeTimeZoneIdentifier
         self.placeAttribution = placeAttribution
+        self.completionState = completionState
+        self.completedAt = completionState == .completed ? completedAt : nil
     }
 
     nonisolated init(item: ItineraryItem) {
@@ -1054,7 +1087,9 @@ private struct EditableItineraryItem: Identifiable {
             placeHours: item.placeHours,
             placeCost: item.placeCost,
             placeTimeZoneIdentifier: item.placeTimeZoneIdentifier,
-            placeAttribution: item.placeAttribution
+            placeAttribution: item.placeAttribution,
+            completionState: item.completionState,
+            completedAt: item.completedAt
         )
     }
 
@@ -1077,7 +1112,9 @@ private struct EditableItineraryItem: Identifiable {
             placeHours: normalizedDetail(placeHours, fallback: nil, source: .user),
             placeCost: normalizedDetail(placeCost, fallback: nil, source: .user),
             placeTimeZoneIdentifier: placeTimeZoneIdentifier,
-            placeAttribution: placeAttribution
+            placeAttribution: placeAttribution,
+            completionState: completionState,
+            completedAt: completionState == .completed ? completedAt ?? .now : nil
         )
     }
 
@@ -1164,6 +1201,35 @@ private struct ItineraryItemEditSheet: View {
                 } footer: {
                     Text("Save updates this itinerary item on the trip.")
                 }
+
+                if trip.status == .active {
+                    Section {
+                        Picker("Status", selection: completionStateBinding) {
+                            ForEach(ItineraryItemCompletionState.allCases) { state in
+                                Label(state.displayName, systemImage: state.systemImage)
+                                    .tag(state)
+                            }
+                        }
+
+                        if item.completionState == .completed {
+                            DatePicker("Done at", selection: completionDateBinding, displayedComponents: [.date, .hourAndMinute])
+                        }
+
+                        if item.completionState == .skipped {
+                            Label("Skipped items stay in the total count and do not count as done.", systemImage: "info.circle")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } header: {
+                        Text("Trip Completion")
+                    }
+                } else if trip.status == .closed && item.completionState == .completed {
+                    Section {
+                        DatePicker("Done at", selection: completionDateBinding, displayedComponents: [.date, .hourAndMinute])
+                    } header: {
+                        Text("Trip Completion")
+                    }
+                }
             }
             .navigationTitle("Edit Item")
             .navigationBarTitleDisplayMode(.inline)
@@ -1195,6 +1261,29 @@ private struct ItineraryItemEditSheet: View {
             dismiss()
         } catch {
             saveErrorMessage = "Trip Planner could not save this item. Try saving again."
+        }
+    }
+
+    private var completionStateBinding: Binding<ItineraryItemCompletionState> {
+        Binding {
+            item.completionState
+        } set: { newValue in
+            item.completionState = newValue
+            switch newValue {
+            case .planned, .skipped:
+                item.completedAt = nil
+            case .completed:
+                item.completedAt = item.completedAt ?? .now
+            }
+        }
+    }
+
+    private var completionDateBinding: Binding<Date> {
+        Binding {
+            item.completedAt ?? .now
+        } set: { newValue in
+            item.completionState = .completed
+            item.completedAt = newValue
         }
     }
 }
@@ -1618,17 +1707,35 @@ private struct ItinerarySection: View {
     let items: [ItineraryItem]
     let refreshItem: (ItineraryItem) -> Void
     let editItem: (ItineraryItem) -> Void
+    let updateCompletionState: (ItineraryItem, ItineraryItemCompletionState, Date) -> Void
 
     var body: some View {
         GlassPanel {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Itinerary")
-                    .font(.headline)
-                    .fontDesign(.rounded)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Itinerary")
+                        .font(.headline)
+                        .fontDesign(.rounded)
+
+                    if trip.usesCompletionProgress && trip.skippedActionableItemCount > 0 {
+                        Text("Skipped items stay in the total count and do not count as done.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
 
                 if items.isEmpty {
-                    Label("No itinerary items yet", systemImage: "list.bullet.clipboard")
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label(trip.usesCompletionProgress ? "No actionable itinerary items yet" : "No itinerary items yet", systemImage: "list.bullet.clipboard")
+                            .foregroundStyle(.secondary)
+
+                        if trip.usesCompletionProgress {
+                            Text("Add itinerary items to track trip completion.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 } else {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(items) { item in
@@ -1636,7 +1743,8 @@ private struct ItinerarySection: View {
                                 trip: trip,
                                 item: item,
                                 refreshItem: refreshItem,
-                                editItem: editItem
+                                editItem: editItem,
+                                updateCompletionState: updateCompletionState
                             )
                         }
                     }
@@ -1651,6 +1759,7 @@ private struct ItineraryItemRow: View {
     let item: ItineraryItem
     let refreshItem: (ItineraryItem) -> Void
     let editItem: (ItineraryItem) -> Void
+    let updateCompletionState: (ItineraryItem, ItineraryItemCompletionState, Date) -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -1658,7 +1767,7 @@ private struct ItineraryItemRow: View {
                 .font(.headline)
                 .foregroundStyle(.white)
                 .frame(width: 34, height: 34)
-                .background(.teal, in: .circle)
+                .background(stateTint, in: .circle)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 6) {
@@ -1690,6 +1799,12 @@ private struct ItineraryItemRow: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+
+                    if trip.usesCompletionProgress {
+                        Label(item.completionState.displayName, systemImage: item.completionState.systemImage)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(stateTint)
+                    }
                 }
 
                 if item.notesOrAddress.isEmpty == false {
@@ -1704,6 +1819,17 @@ private struct ItineraryItemRow: View {
                 }
 
                 LazyVGrid(columns: actionColumns, alignment: .leading, spacing: 8) {
+                    if trip.status == .active {
+                        ForEach(completionActions, id: \.state) { action in
+                            Button(action.title, systemImage: action.systemImage) {
+                                updateCompletionState(item, action.state, .now)
+                            }
+                            .buttonStyle(.glass)
+                            .tint(action.tint)
+                            .accessibilityHint(action.accessibilityHint)
+                        }
+                    }
+
                     Button {
                         AppleMapsDirectionsService.openDirections(for: item, in: trip)
                     } label: {
@@ -1750,6 +1876,7 @@ private struct ItineraryItemRow: View {
         }
         .glassEffect(.regular.tint(.teal.opacity(0.08)), in: .rect(cornerRadius: 16))
         .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(item.name), \(item.dayDisplayString), \(item.category.displayName), \(item.completionStateAccessibilityLabel)")
         .accessibilityHint("Opens an editable itinerary item view")
     }
 
@@ -1764,6 +1891,31 @@ private struct ItineraryItemRow: View {
             .lineLimit(1)
             .minimumScaleFactor(0.85)
             .frame(maxWidth: .infinity)
+    }
+
+    private var stateTint: Color {
+        switch item.completionState {
+        case .planned:
+            return .teal
+        case .completed:
+            return .green
+        case .skipped:
+            return .orange
+        }
+    }
+
+    private var completionActions: [CompletionAction] {
+        switch item.completionState {
+        case .planned:
+            return [
+                CompletionAction(title: "Done", systemImage: "checkmark.circle.fill", state: .completed, tint: .green, accessibilityHint: "Marks this item done now"),
+                CompletionAction(title: "Skip", systemImage: "forward.circle.fill", state: .skipped, tint: .orange, accessibilityHint: "Marks this item skipped without counting it as done")
+            ]
+        case .completed, .skipped:
+            return [
+                CompletionAction(title: "Undo", systemImage: "arrow.uturn.backward.circle.fill", state: .planned, tint: .teal, accessibilityHint: "Returns this item to planned")
+            ]
+        }
     }
 
     private var validatedWebsiteURL: URL? {
@@ -1793,6 +1945,14 @@ private struct ItineraryItemRow: View {
         guard digits.count >= 7 else { return nil }
         return URL(string: "tel://\(digits)")
     }
+}
+
+private struct CompletionAction {
+    let title: String
+    let systemImage: String
+    let state: ItineraryItemCompletionState
+    let tint: Color
+    let accessibilityHint: String
 }
 
 private struct PlaceDetailsGrid: View {
