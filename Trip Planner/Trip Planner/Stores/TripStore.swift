@@ -18,6 +18,12 @@ struct TripGroups {
     let closedTrips: [Trip]
 }
 
+nonisolated enum ActiveTripLaunchDecision: Equatable, Sendable {
+    case none
+    case single(UUID)
+    case chooser([UUID])
+}
+
 @MainActor
 enum TripStore {
     static func sortedOpenTrips(_ trips: [Trip]) -> [Trip] {
@@ -55,6 +61,52 @@ enum TripStore {
                 }
                 return lhsDate < rhsDate
             }
+    }
+
+    static func sortedLaunchActiveTrips(_ trips: [Trip], on date: Date = .now, calendar: Calendar = .current) -> [Trip] {
+        sortedActiveTrips(trips)
+            .sorted { lhs, rhs in
+                let lhsIsCurrent = isTripCurrent(lhs, on: date, calendar: calendar)
+                let rhsIsCurrent = isTripCurrent(rhs, on: date, calendar: calendar)
+                if lhsIsCurrent != rhsIsCurrent {
+                    return lhsIsCurrent
+                }
+
+                let lhsStart = lhs.exactStartDate ?? lhs.activatedAt ?? lhs.windowStartDate
+                let rhsStart = rhs.exactStartDate ?? rhs.activatedAt ?? rhs.windowStartDate
+                if lhsStart != rhsStart {
+                    return lhsStart < rhsStart
+                }
+
+                return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+            }
+    }
+
+    static func activeLaunchDecision(
+        for trips: [Trip],
+        hasAlreadyPresented: Bool,
+        hasBlockingPresentation: Bool,
+        on date: Date = .now,
+        calendar: Calendar = .current
+    ) -> ActiveTripLaunchDecision {
+        guard hasAlreadyPresented == false,
+              hasBlockingPresentation == false
+        else {
+            return .none
+        }
+
+        let activeTrips = sortedLaunchActiveTrips(trips, on: date, calendar: calendar)
+
+        if let onlyTrip = activeTrips.first,
+           activeTrips.count == 1 {
+            return .single(onlyTrip.id)
+        }
+
+        guard activeTrips.isEmpty == false else {
+            return .none
+        }
+
+        return .chooser(activeTrips.map(\.id))
     }
 
     static func sortedClosedTrips(_ trips: [Trip]) -> [Trip] {
@@ -286,6 +338,19 @@ enum TripStore {
         }
 
         return location.distance(from: CLLocation(latitude: latitude, longitude: longitude))
+    }
+
+    private static func isTripCurrent(_ trip: Trip, on date: Date, calendar: Calendar) -> Bool {
+        guard let startDate = trip.exactStartDate ?? trip.activatedAt else {
+            return false
+        }
+
+        let normalizedDate = calendar.startOfDay(for: date)
+        let normalizedStart = calendar.startOfDay(for: startDate)
+        let endDate = trip.exactEndDate ?? calendar.date(byAdding: .day, value: max(1, trip.durationDays) - 1, to: normalizedStart) ?? normalizedStart
+        let normalizedEnd = calendar.startOfDay(for: endDate)
+
+        return normalizedDate >= normalizedStart && normalizedDate <= normalizedEnd
     }
 
     private static func sampleDate(year: Int, month: Int, day: Int) -> Date {
