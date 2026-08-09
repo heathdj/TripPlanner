@@ -1,6 +1,6 @@
 import Foundation
 
-enum ItineraryItemCategory: String, CaseIterable, Codable, Identifiable, Sendable {
+nonisolated enum ItineraryItemCategory: String, CaseIterable, Codable, Identifiable, Sendable {
     case stay
     case food
     case activity

@@ -444,6 +444,7 @@ private struct LifecycleSection: View {
     @State private var exactStartDate: Date
     @State private var errorMessage: String?
     @State private var pendingAction: LifecycleConfirmation?
+    @State private var proposedActivationDate = Date.now
 
     init(trip: Trip, saveTripChanges: @escaping () throws -> Void) {
         self.trip = trip
@@ -464,6 +465,11 @@ private struct LifecycleSection: View {
         } catch {
             return error.localizedDescription
         }
+    }
+
+    private var scheduledEndDate: Date? {
+        guard canEditSchedule else { return nil }
+        return try? TripLifecycleService.previewExactEndDate(for: trip, exactStartDate: exactStartDate)
     }
 
     private var isShowingError: Binding<Bool> {
@@ -491,6 +497,12 @@ private struct LifecycleSection: View {
                 if canEditSchedule {
                     DatePicker("Exact start", selection: $exactStartDate, in: trip.windowStartDate...trip.windowEndDate, displayedComponents: .date)
 
+                    if let scheduledEndDate {
+                        Label("Ends \(scheduledEndDate.formatted(date: .abbreviated, time: .omitted))", systemImage: "calendar.badge.clock")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
                     if let scheduleValidationMessage {
                         Label(scheduleValidationMessage, systemImage: "exclamationmark.triangle.fill")
                             .font(.caption)
@@ -498,17 +510,19 @@ private struct LifecycleSection: View {
                     }
 
                     HStack {
-                        Button(trip.status == .planned ? "Update Start" : "Plan Trip", systemImage: "calendar.badge.checkmark") {
+                        Button(trip.status == .planned ? "Update Exact Dates" : "Set Exact Dates", systemImage: "calendar.badge.checkmark") {
                             setExactStartDate()
                         }
                         .buttonStyle(.glassProminent)
                         .disabled(scheduleValidationMessage != nil)
+                        .accessibilityHint("Saves the exact start date and calculated end date")
 
                         if trip.status == .planned {
-                            Button("Clear Date", systemImage: "calendar.badge.minus") {
+                            Button("Clear Exact Date", systemImage: "calendar.badge.minus") {
                                 clearExactStartDate()
                             }
                             .buttonStyle(.glass)
+                            .accessibilityHint("Returns this planned trip to Open Trips")
                         }
                     }
                 }
@@ -516,21 +530,27 @@ private struct LifecycleSection: View {
                 if trip.status != .closed {
                     HStack {
                         if trip.status == .open || trip.status == .planned {
-                            Button("Start", systemImage: "play.fill") {
+                            Button("Make Active", systemImage: "play.fill") {
+                                proposedActivationDate = .now
                                 pendingAction = .activate
                             }
                             .buttonStyle(.glass)
+                            .accessibilityHint(activationAccessibilityHint)
                         }
 
-                        Button("Complete", systemImage: "checkmark.circle.fill") {
-                            pendingAction = .complete
+                        if trip.status == .active {
+                            Button("Finish Trip", systemImage: "checkmark.circle.fill") {
+                                pendingAction = .finish
+                            }
+                            .buttonStyle(.glassProminent)
+                            .accessibilityHint("Asks for confirmation before moving this trip to Closed Trips as completed")
                         }
-                        .buttonStyle(.glass)
 
-                        Button("Cancel", systemImage: "xmark.circle.fill", role: .destructive) {
+                        Button("Cancel Trip", systemImage: "xmark.circle.fill", role: .destructive) {
                             pendingAction = .cancel
                         }
                         .buttonStyle(.glass)
+                        .accessibilityHint("Destructive action. Asks for confirmation before moving this trip to Closed Trips as cancelled")
                     }
                 }
             }
@@ -558,7 +578,7 @@ private struct LifecycleSection: View {
 
             Button("Keep Editing", role: .cancel) { }
         } message: {
-            Text(pendingAction?.message ?? "")
+            Text(pendingAction?.message(for: trip, proposedActivationDate: proposedActivationDate) ?? "")
         }
         .alert("Trip Not Updated", isPresented: isShowingError) {
             Button("OK", role: .cancel) { }
@@ -587,6 +607,14 @@ private struct LifecycleSection: View {
         }
     }
 
+    private var activationAccessibilityHint: String {
+        if trip.exactStartDate == nil {
+            return "Asks you to confirm today's date as the trip start before moving this trip to Active Trips"
+        }
+
+        return "Asks for confirmation before moving this trip to Active Trips"
+    }
+
     private func setExactStartDate() {
         do {
             _ = try TripLifecycleService.setExactStartDate(exactStartDate, for: trip)
@@ -609,8 +637,8 @@ private struct LifecycleSection: View {
         do {
             switch action {
             case .activate:
-                try TripLifecycleService.activate(trip)
-            case .complete:
+                try TripLifecycleService.activate(trip, at: proposedActivationDate)
+            case .finish:
                 try TripLifecycleService.close(trip, outcome: .completed)
             case .cancel:
                 try TripLifecycleService.close(trip, outcome: .cancelled)
@@ -625,7 +653,7 @@ private struct LifecycleSection: View {
 
 private enum LifecycleConfirmation: String, Identifiable {
     case activate
-    case complete
+    case finish
     case cancel
 
     var id: String {
@@ -635,19 +663,22 @@ private enum LifecycleConfirmation: String, Identifiable {
     var title: String {
         switch self {
         case .activate:
-            return "Start Trip?"
-        case .complete:
-            return "Complete Trip?"
+            return "Make Trip Active?"
+        case .finish:
+            return "Finish Trip?"
         case .cancel:
             return "Cancel Trip?"
         }
     }
 
-    var message: String {
+    func message(for trip: Trip, proposedActivationDate: Date) -> String {
         switch self {
         case .activate:
+            if trip.exactStartDate == nil {
+                return "This will set the exact start date to \(proposedActivationDate.formatted(date: .abbreviated, time: .omitted)) and move the trip to Active Trips."
+            }
             return "This moves the trip into Active Trips. You can have more than one active trip."
-        case .complete:
+        case .finish:
             return "This closes the trip and marks the outcome as completed."
         case .cancel:
             return "This closes the trip and marks the outcome as cancelled."
@@ -657,9 +688,9 @@ private enum LifecycleConfirmation: String, Identifiable {
     var confirmButtonTitle: String {
         switch self {
         case .activate:
-            return "Start Trip"
-        case .complete:
-            return "Complete Trip"
+            return "Make Active"
+        case .finish:
+            return "Finish Trip"
         case .cancel:
             return "Cancel Trip"
         }

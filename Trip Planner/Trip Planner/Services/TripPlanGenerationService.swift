@@ -52,18 +52,18 @@ struct TripPlanDraftItemInput: Equatable, Sendable {
     let dayNumber: Int
 }
 
-enum TripPlanGenerationStatus: Equatable, Sendable {
+nonisolated enum TripPlanGenerationStatus: Equatable, Sendable {
     case available
     case deviceNotEligible
     case appleIntelligenceNotEnabled
     case modelNotReady
     case unavailable
 
-    var isAvailable: Bool {
+    nonisolated var isAvailable: Bool {
         self == .available
     }
 
-    var title: String {
+    nonisolated var title: String {
         switch self {
         case .available:
             return "On-device planning ready"
@@ -78,7 +78,7 @@ enum TripPlanGenerationStatus: Equatable, Sendable {
         }
     }
 
-    var message: String {
+    nonisolated var message: String {
         switch self {
         case .available:
             return "Generate a private draft on this device. Nothing is saved automatically."

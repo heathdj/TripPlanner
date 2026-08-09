@@ -16,6 +16,7 @@ struct DashboardView: View {
     @State private var presentedTrip: PresentedTrip?
     @State private var isShowingNewTrip = false
     @State private var pendingCreatedTrip: Trip?
+    @State private var pendingLifecycleAction: DashboardLifecycleAction?
 
     private let columns = [
         GridItem(.adaptive(minimum: 280), spacing: 16)
@@ -73,6 +74,15 @@ struct DashboardView: View {
                             plannedItemTotal: plannedItemTotal
                         )
 
+                        TripSection(
+                            title: "Active Trips",
+                            emptyTitle: "No active trips",
+                            trips: activeTrips,
+                            columns: columns,
+                            selectTrip: selectTrip,
+                            requestActivation: requestActivation
+                        )
+
                         NearYouSection(
                             nearbyTrips: tripGroups.nearbyTrips,
                             distanceUnit: distanceUnit,
@@ -81,16 +91,9 @@ struct DashboardView: View {
                             isRequestingLocation: locationService.isRequestingLocation,
                             errorMessage: locationService.errorMessage,
                             selectTrip: selectTrip,
+                            requestActivation: requestActivation,
                             requestLocation: locationService.requestLocationAccess,
                             openSystemSettings: openSystemSettings
-                        )
-
-                        TripSection(
-                            title: "Active Trips",
-                            emptyTitle: "No active trips",
-                            trips: activeTrips,
-                            columns: columns,
-                            selectTrip: selectTrip
                         )
 
                         TripSection(
@@ -98,15 +101,17 @@ struct DashboardView: View {
                             emptyTitle: "No planned trips",
                             trips: plannedTrips,
                             columns: columns,
-                            selectTrip: selectTrip
+                            selectTrip: selectTrip,
+                            requestActivation: requestActivation
                         )
 
                         TripSection(
-                            title: "Flexible Ideas",
-                            emptyTitle: "No flexible trip ideas",
+                            title: "Open Trips",
+                            emptyTitle: "No open trips",
                             trips: openTrips,
                             columns: columns,
-                            selectTrip: selectTrip
+                            selectTrip: selectTrip,
+                            requestActivation: requestActivation
                         )
 
                         TripSection(
@@ -114,7 +119,8 @@ struct DashboardView: View {
                             emptyTitle: "No closed trips",
                             trips: closedTrips,
                             columns: columns,
-                            selectTrip: selectTrip
+                            selectTrip: selectTrip,
+                            requestActivation: requestActivation
                         )
                     }
                     .padding()
@@ -157,6 +163,27 @@ struct DashboardView: View {
             normalizeMigratedLifecycles()
             locationService.requestAccessOrRefreshLocation()
         }
+        .confirmationDialog(
+            pendingLifecycleAction?.title ?? "Update Trip",
+            isPresented: Binding {
+                pendingLifecycleAction != nil
+            } set: { isPresented in
+                if isPresented == false {
+                    pendingLifecycleAction = nil
+                }
+            },
+            titleVisibility: .visible
+        ) {
+            if let pendingLifecycleAction {
+                Button(pendingLifecycleAction.confirmButtonTitle) {
+                    perform(pendingLifecycleAction)
+                }
+            }
+
+            Button("Keep Trip As Is", role: .cancel) { }
+        } message: {
+            Text(pendingLifecycleAction?.message ?? "")
+        }
     }
 
     private func openSystemSettings() {
@@ -173,6 +200,23 @@ struct DashboardView: View {
 
     private func createTrip(_ trip: Trip) {
         pendingCreatedTrip = trip
+    }
+
+    private func requestActivation(_ trip: Trip) {
+        pendingLifecycleAction = DashboardLifecycleAction(trip: trip, proposedStartDate: .now)
+    }
+
+    private func perform(_ action: DashboardLifecycleAction) {
+        do {
+            try TripLifecycleService.activate(action.trip, at: action.proposedStartDate)
+            try modelContext.save()
+        } catch {
+            // The detail screen exposes full scheduling controls when the proposed start cannot fit.
+            presentedTrip = PresentedTrip(
+                trip: action.trip,
+                startsGeneratingDraftOnAppear: false
+            )
+        }
     }
 
     private func saveGeneratedTrip(_ trip: Trip) {
@@ -229,6 +273,31 @@ private struct PresentedTrip: Identifiable {
     }
 }
 
+private struct DashboardLifecycleAction: Identifiable {
+    let trip: Trip
+    let proposedStartDate: Date
+
+    var id: UUID {
+        trip.id
+    }
+
+    var title: String {
+        "Make Trip Active?"
+    }
+
+    var confirmButtonTitle: String {
+        "Make Active"
+    }
+
+    var message: String {
+        if trip.exactStartDate == nil {
+            return "This will set the exact start date to \(proposedStartDate.formatted(date: .abbreviated, time: .omitted)) and move the trip to Active Trips."
+        }
+
+        return "This moves \(trip.title) to Active Trips. You can have more than one active trip."
+    }
+}
+
 private struct HeroPanel: View {
     let nextTrip: Trip?
     let currentTripCount: Int
@@ -281,6 +350,7 @@ private struct NearYouSection: View {
     let isRequestingLocation: Bool
     let errorMessage: String?
     let selectTrip: (Trip) -> Void
+    let requestActivation: (Trip) -> Void
     let requestLocation: () -> Void
     let openSystemSettings: () -> Void
 
@@ -310,7 +380,8 @@ private struct NearYouSection: View {
                         TripCardButton(
                             trip: nearbyTrip.trip,
                             distanceSummary: distanceUnit.formattedDistance(meters: nearbyTrip.distanceMeters),
-                            selectTrip: selectTrip
+                            selectTrip: selectTrip,
+                            requestActivation: requestActivation
                         )
                     }
                 }
@@ -403,6 +474,7 @@ private struct TripSection: View {
     let trips: [Trip]
     let columns: [GridItem]
     let selectTrip: (Trip) -> Void
+    let requestActivation: (Trip) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -421,7 +493,8 @@ private struct TripSection: View {
                     ForEach(trips) { trip in
                         TripCardButton(
                             trip: trip,
-                            selectTrip: selectTrip
+                            selectTrip: selectTrip,
+                            requestActivation: requestActivation
                         )
                     }
                 }
@@ -434,19 +507,42 @@ private struct TripCardButton: View {
     let trip: Trip
     var distanceSummary: String? = nil
     let selectTrip: (Trip) -> Void
+    let requestActivation: (Trip) -> Void
 
     var body: some View {
-        Button {
-            selectTrip(trip)
-        } label: {
-            TripSummaryCard(
-                trip: trip.summary(),
-                distanceSummary: distanceSummary
-            )
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                selectTrip(trip)
+            } label: {
+                TripSummaryCard(
+                    trip: trip.summary(),
+                    distanceSummary: distanceSummary
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(accessibilityLabel)
+            .accessibilityHint("Opens trip details")
+
+            if canActivate {
+                Button("Make Active", systemImage: "play.fill") {
+                    requestActivation(trip)
+                }
+                .buttonStyle(.glassProminent)
+                .accessibilityHint(activationHint)
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityHint("Opens trip details")
+    }
+
+    private var canActivate: Bool {
+        trip.status == .open || trip.status == .planned
+    }
+
+    private var activationHint: String {
+        if trip.exactStartDate == nil {
+            return "Asks you to confirm today's date as the trip start before moving this trip to Active Trips"
+        }
+
+        return "Moves this trip to Active Trips after confirmation"
     }
 
     private var accessibilityLabel: String {
@@ -527,7 +623,7 @@ private struct TripSummaryCard: View {
                 }
 
                 HStack {
-                    Text(trip.status.rawValue)
+                    Text(statusBadgeText)
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
@@ -542,6 +638,15 @@ private struct TripSummaryCard: View {
             }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private var statusBadgeText: String {
+        if trip.status == .closed,
+           let closedOutcomeSummary = trip.closedOutcomeSummary {
+            return closedOutcomeSummary
+        }
+
+        return trip.status.rawValue
     }
 }
 

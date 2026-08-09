@@ -5,7 +5,7 @@ enum PlaceDetailSource: String, Codable, Hashable, Sendable {
     case user
 }
 
-struct PlaceDetailValue: Codable, Hashable, Sendable {
+nonisolated struct PlaceDetailValue: Codable, Hashable, Sendable {
     var value: String
     var source: PlaceDetailSource
     var updatedAt: Date
@@ -17,7 +17,7 @@ struct PlaceDetailValue: Codable, Hashable, Sendable {
     }
 }
 
-struct ItineraryItem: Codable, Hashable, Identifiable, Sendable {
+nonisolated struct ItineraryItem: Codable, Hashable, Identifiable, Sendable {
     var id: UUID
     var name: String
     var notesOrAddress: String
