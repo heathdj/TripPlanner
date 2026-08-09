@@ -195,6 +195,14 @@ The dashboard now reads like an operations board: Active first, then Near You as
 
 Build war story: Swift 6 with default MainActor isolation is strict about even harmless-looking value helpers. Pure values like distance units, suggestions, summaries, and generated-plan statuses needed to opt out of UI isolation so SwiftData models and Swift Testing macros could use them without pretending they belong to the main actor. The fix was not to slap `@MainActor` everywhere; it was to mark pure helpers `nonisolated` and keep UI-owned services on the main actor.
 
+### 2026-08-08: Issue #51 Adds a Polite Activation Nudge
+
+Issue `#51` teaches Trip Planner to ask, not nag. A planned trip can prompt when its exact start is close, an open or planned trip can prompt when the traveler is physically near the destination, and when both are true the app shows one combined prompt instead of two competing interruptions.
+
+The prompt state lives in AppStorage because it is preference-like memory: last prompt reason, Not Now cooldown, and Don't Ask Again suppression. Settings can tune date lead time, disable date or proximity prompts, and reset suppressed prompts. Trip Details can reset suppression for one trip. That makes the prompt system feel reversible rather than bossy.
+
+The date math is deliberately calendar-based and time-zone aware. Travel days are not stopwatch intervals; they are local calendar days at the destination. The service accepts a destination time zone and falls back gracefully when location is denied, stale, or unavailable, so date prompts never depend on location permission.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

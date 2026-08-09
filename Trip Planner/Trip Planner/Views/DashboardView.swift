@@ -11,12 +11,18 @@ struct DashboardView: View {
     @AppStorage(TravelPreferencesStorage.Key.defaultWindowLengthDays) private var defaultWindowLengthDays = TravelSettings.defaultWindowLengthDays
     @AppStorage(TravelPreferencesStorage.Key.distanceUnit) private var distanceUnitRawValue = DistanceUnit.kilometers.rawValue
     @AppStorage(TravelPreferencesStorage.Key.nearYouDistanceKilometers) private var nearYouDistanceKilometers = TravelSettings.defaultNearYouDistanceKilometers
+    @AppStorage(TravelPreferencesStorage.Key.activationLeadTimeDays) private var activationLeadTimeDays = ActivationPromptEligibilityService.defaultLeadTimeDays
+    @AppStorage(TravelPreferencesStorage.Key.activationDatePromptsEnabled) private var activationDatePromptsEnabled = true
+    @AppStorage(TravelPreferencesStorage.Key.activationProximityPromptsEnabled) private var activationProximityPromptsEnabled = true
+    @AppStorage(TravelPreferencesStorage.Key.activationPromptState) private var activationPromptStateData = TravelPreferencesStorage.defaultActivationPromptStateData
 
     @State private var locationService = LocationService()
     @State private var presentedTrip: PresentedTrip?
     @State private var isShowingNewTrip = false
     @State private var pendingCreatedTrip: Trip?
     @State private var pendingLifecycleAction: DashboardLifecycleAction?
+    @State private var pendingActivationPrompt: ActivationPromptCandidate?
+    @State private var didEvaluateLaunchPrompt = false
 
     private let columns = [
         GridItem(.adaptive(minimum: 280), spacing: 16)
@@ -162,6 +168,10 @@ struct DashboardView: View {
         .task {
             normalizeMigratedLifecycles()
             locationService.requestAccessOrRefreshLocation()
+            evaluateActivationPromptIfNeeded()
+        }
+        .onChange(of: locationService.currentLocation?.timestamp) {
+            evaluateActivationPromptIfNeeded(allowsRepeatEvaluation: true)
         }
         .confirmationDialog(
             pendingLifecycleAction?.title ?? "Update Trip",
@@ -183,6 +193,33 @@ struct DashboardView: View {
             Button("Keep Trip As Is", role: .cancel) { }
         } message: {
             Text(pendingLifecycleAction?.message ?? "")
+        }
+        .confirmationDialog(
+            pendingActivationPrompt?.title ?? "Make Trip Active?",
+            isPresented: Binding {
+                pendingActivationPrompt != nil
+            } set: { isPresented in
+                if isPresented == false {
+                    pendingActivationPrompt = nil
+                }
+            },
+            titleVisibility: .visible
+        ) {
+            if let pendingActivationPrompt {
+                Button("Make Active") {
+                    activatePromptedTrip(pendingActivationPrompt)
+                }
+
+                Button("Not Now", role: .cancel) {
+                    dismissActivationPrompt(pendingActivationPrompt)
+                }
+
+                Button("Don't Ask Again for This Trip", role: .destructive) {
+                    suppressActivationPrompt(pendingActivationPrompt)
+                }
+            }
+        } message: {
+            Text(pendingActivationPrompt?.message ?? "")
         }
     }
 
@@ -217,6 +254,79 @@ struct DashboardView: View {
                 startsGeneratingDraftOnAppear: false
             )
         }
+    }
+
+    private func evaluateActivationPromptIfNeeded(allowsRepeatEvaluation: Bool = false) {
+        guard pendingActivationPrompt == nil,
+              pendingLifecycleAction == nil,
+              allowsRepeatEvaluation || didEvaluateLaunchPrompt == false
+        else {
+            return
+        }
+
+        didEvaluateLaunchPrompt = true
+        let state = TravelPreferencesStorage.decodeActivationPromptState(from: activationPromptStateData)
+        guard let candidate = ActivationPromptEligibilityService.candidate(
+            from: trips,
+            userLocation: locationService.currentLocation,
+            nearYouDistanceKilometers: nearYouDistanceKilometers,
+            leadTimeDays: activationLeadTimeDays,
+            datePromptsEnabled: activationDatePromptsEnabled,
+            proximityPromptsEnabled: activationProximityPromptsEnabled,
+            state: state
+        ) else {
+            return
+        }
+
+        activationPromptStateData = TravelPreferencesStorage.encodeActivationPromptState(
+            ActivationPromptEligibilityService.recordPromptShown(
+                for: candidate.trip.id,
+                reasons: candidate.reasons,
+                at: .now,
+                in: state
+            )
+        )
+        pendingActivationPrompt = candidate
+    }
+
+    private func activatePromptedTrip(_ candidate: ActivationPromptCandidate) {
+        do {
+            try TripLifecycleService.activate(candidate.trip, at: candidate.proposedStartDate)
+            try modelContext.save()
+            pendingActivationPrompt = nil
+        } catch {
+            presentedTrip = PresentedTrip(
+                trip: candidate.trip,
+                startsGeneratingDraftOnAppear: false
+            )
+            pendingActivationPrompt = nil
+        }
+    }
+
+    private func dismissActivationPrompt(_ candidate: ActivationPromptCandidate) {
+        let state = TravelPreferencesStorage.decodeActivationPromptState(from: activationPromptStateData)
+        activationPromptStateData = TravelPreferencesStorage.encodeActivationPromptState(
+            ActivationPromptEligibilityService.dismiss(
+                tripID: candidate.trip.id,
+                reasons: candidate.reasons,
+                at: .now,
+                in: state
+            )
+        )
+        pendingActivationPrompt = nil
+    }
+
+    private func suppressActivationPrompt(_ candidate: ActivationPromptCandidate) {
+        let state = TravelPreferencesStorage.decodeActivationPromptState(from: activationPromptStateData)
+        activationPromptStateData = TravelPreferencesStorage.encodeActivationPromptState(
+            ActivationPromptEligibilityService.suppress(
+                tripID: candidate.trip.id,
+                reasons: candidate.reasons,
+                at: .now,
+                in: state
+            )
+        )
+        pendingActivationPrompt = nil
     }
 
     private func saveGeneratedTrip(_ trip: Trip) {

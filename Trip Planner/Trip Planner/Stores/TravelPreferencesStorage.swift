@@ -8,10 +8,15 @@ enum TravelPreferencesStorage {
         nonisolated static let nearYouDistanceKilometers = "travelPreferences.nearYouDistanceKilometers"
         nonisolated static let selectedInterestNames = "travelPreferences.selectedInterestNames"
         nonisolated static let customInterestNames = "travelPreferences.customInterestNames"
+        nonisolated static let activationLeadTimeDays = "travelPreferences.activationLeadTimeDays"
+        nonisolated static let activationDatePromptsEnabled = "travelPreferences.activationDatePromptsEnabled"
+        nonisolated static let activationProximityPromptsEnabled = "travelPreferences.activationProximityPromptsEnabled"
+        nonisolated static let activationPromptState = "travelPreferences.activationPromptState"
     }
 
     nonisolated static let defaultSelectedInterestsData = "[]"
     nonisolated static let defaultCustomInterestsData = "[]"
+    nonisolated static let defaultActivationPromptStateData = "{}"
 
     nonisolated static func decodeInterests(from data: String) -> [String] {
         guard let jsonData = data.data(using: .utf8),
@@ -106,5 +111,25 @@ enum TravelPreferencesStorage {
 
             result.append(normalized)
         }
+    }
+
+    nonisolated static func decodeActivationPromptState(from data: String) -> ActivationPromptState {
+        guard let jsonData = data.data(using: .utf8),
+              let state = try? JSONDecoder().decode(ActivationPromptState.self, from: jsonData)
+        else {
+            return ActivationPromptState()
+        }
+
+        return state
+    }
+
+    nonisolated static func encodeActivationPromptState(_ state: ActivationPromptState) -> String {
+        guard let data = try? JSONEncoder().encode(state),
+              let string = String(data: data, encoding: .utf8)
+        else {
+            return defaultActivationPromptStateData
+        }
+
+        return string
     }
 }

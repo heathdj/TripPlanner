@@ -137,10 +137,18 @@ extension LocationService: CLLocationManagerDelegate {
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: any Error) {
+        let message: String
+        if let locationError = error as? CLError,
+           locationError.code == .locationUnknown {
+            message = "Location is enabled, but your current location is not available yet. In Simulator, choose a location from Features > Location and try again."
+        } else {
+            message = "Trip Planner could not get your current location. Nearby prompts are paused, but date-based prompts still work."
+        }
+
         Task { @MainActor in
             self.manager.stopUpdatingLocation()
             isRequestingLocation = false
-            errorMessage = error.localizedDescription
+            errorMessage = message
         }
     }
 }
