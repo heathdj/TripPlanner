@@ -412,6 +412,37 @@ struct TripPlannerFoundationTests {
     }
 
     @MainActor
+    @Test("Exact start dates include the last fitting day in the flexible window", .bug("https://github.com/heathdj/TripPlanner/issues/53"))
+    func exactStartDatesIncludeLastFittingDayInWindow() throws {
+        let boundaryTrip = Trip(
+            title: "Boundary",
+            location: "Test",
+            windowStartDate: localDate(year: 2026, month: 5, day: 1),
+            windowEndDate: localDate(year: 2026, month: 5, day: 4),
+            durationDays: 3
+        )
+
+        let exactEndDate = try TripLifecycleService.setExactStartDate(
+            localDate(year: 2026, month: 5, day: 2),
+            for: boundaryTrip
+        )
+
+        #expect(exactEndDate == localDate(year: 2026, month: 5, day: 4))
+        #expect(boundaryTrip.status == .planned)
+
+        let tooLateTrip = Trip(
+            title: "Too late boundary",
+            location: "Test",
+            windowStartDate: localDate(year: 2026, month: 5, day: 1),
+            windowEndDate: localDate(year: 2026, month: 5, day: 4),
+            durationDays: 3
+        )
+        #expect(throws: TripLifecycleService.ValidationError.tripDoesNotFitWindow) {
+            try TripLifecycleService.setExactStartDate(localDate(year: 2026, month: 5, day: 3), for: tooLateTrip)
+        }
+    }
+
+    @MainActor
     @Test("Clearing an exact date moves planned trips back to open", .bug("https://github.com/heathdj/TripPlanner/issues/49"))
     func clearingExactDateMovesPlannedTripBackToOpen() throws {
         let trip = trip(title: "Flexible again", startDay: 1, endDay: 8, status: .open)
@@ -421,6 +452,26 @@ struct TripPlannerFoundationTests {
 
         #expect(trip.status == .open)
         #expect(trip.exactStartDate == nil)
+    }
+
+    @MainActor
+    @Test("Lifecycle transitions reject invalid states", .bug("https://github.com/heathdj/TripPlanner/issues/53"))
+    func lifecycleTransitionsRejectInvalidStates() throws {
+        let openTrip = trip(title: "Open", startDay: 1, endDay: 8, status: .open)
+        let activeTrip = trip(title: "Active", startDay: 1, endDay: 8, status: .open)
+        let closedTrip = trip(title: "Closed", startDay: 1, endDay: 8, status: .closed)
+
+        try TripLifecycleService.activate(activeTrip, at: localDate(year: 2026, month: 5, day: 1))
+
+        #expect(throws: TripLifecycleService.ValidationError.cannotClearExactDate) {
+            try TripLifecycleService.clearExactStartDate(for: openTrip)
+        }
+        #expect(throws: TripLifecycleService.ValidationError.cannotClearExactDate) {
+            try TripLifecycleService.clearExactStartDate(for: activeTrip)
+        }
+        #expect(throws: TripLifecycleService.ValidationError.cannotClose) {
+            try TripLifecycleService.close(closedTrip, outcome: .completed)
+        }
     }
 
     @MainActor
@@ -617,6 +668,58 @@ struct TripPlannerFoundationTests {
 
         #expect(candidate.trip.id == trip.id)
         #expect(candidate.reasons == [.date, .proximity])
+    }
+
+    @MainActor
+    @Test("Activation prompt state persists through AppStorage encoding", .bug("https://github.com/heathdj/TripPlanner/issues/53"))
+    func activationPromptStatePersistsThroughAppStorageEncoding() {
+        let tripID = UUID()
+        let shownAt = localDate(year: 2026, month: 5, day: 6)
+        let shownState = ActivationPromptEligibilityService.recordPromptShown(
+            for: tripID,
+            reasons: [.date, .proximity],
+            at: shownAt,
+            in: ActivationPromptState()
+        )
+        let state = ActivationPromptEligibilityService.suppress(
+            tripID: tripID,
+            reasons: [.date, .proximity],
+            at: shownAt,
+            in: shownState
+        )
+
+        let encoded = TravelPreferencesStorage.encodeActivationPromptState(state)
+        let decoded = TravelPreferencesStorage.decodeActivationPromptState(from: encoded)
+        let record = decoded.record(for: tripID)
+
+        #expect(record.isSuppressed)
+        #expect(record.lastPromptReasons == [.date, .proximity])
+        #expect(record.lastPromptedAt == shownAt)
+        #expect(TravelPreferencesStorage.decodeActivationPromptState(from: "not json") == ActivationPromptState())
+    }
+
+    @MainActor
+    @Test("Location failure leaves date prompts available", .bug("https://github.com/heathdj/TripPlanner/issues/53"))
+    func locationFailureLeavesDatePromptsAvailable() throws {
+        let trip = trip(title: "Date only", startDay: 10, endDay: 20, status: .open)
+        try TripLifecycleService.setExactStartDate(localDate(year: 2026, month: 5, day: 10), for: trip)
+
+        let candidate = try #require(ActivationPromptEligibilityService.candidate(
+            for: trip,
+            now: localDate(year: 2026, month: 5, day: 8),
+            userLocation: nil,
+            nearYouDistanceKilometers: 100,
+            leadTimeDays: 2,
+            datePromptsEnabled: true,
+            proximityPromptsEnabled: true,
+            state: ActivationPromptState()
+        ))
+
+        #expect(candidate.reasons == [.date])
+        #expect(LocationServiceMessage.message(for: CLError(.locationUnknown)) == LocationServiceMessage.temporarilyUnavailable)
+        #expect(LocationServiceMessage.message(for: NSError(domain: "TripPlannerTests", code: 1)) == LocationServiceMessage.unavailable)
+        #expect(LocationServiceMessage.denied.contains("Open Settings"))
+        #expect(LocationServiceMessage.restricted.contains("Open and Closed sections"))
     }
 
     @MainActor
@@ -920,6 +1023,43 @@ struct TripPlannerFoundationTests {
                 on: currentDate
             ) == .none
         )
+    }
+
+    @MainActor
+    @Test("Active trip launch decisions handle zero one and many active trips", .bug("https://github.com/heathdj/TripPlanner/issues/53"))
+    func activeTripLaunchDecisionsHandleZeroOneAndManyActiveTrips() throws {
+        let open = trip(title: "Open", startDay: 1, endDay: 8, status: .open)
+        let firstActive = trip(title: "First", startDay: 1, endDay: 8, status: .open)
+        let secondActive = trip(title: "Second", startDay: 2, endDay: 9, status: .open)
+        let currentDate = localDate(year: 2026, month: 5, day: 2)
+
+        try TripLifecycleService.activate(firstActive, at: localDate(year: 2026, month: 5, day: 1))
+        try TripLifecycleService.activate(secondActive, at: currentDate)
+
+        #expect(TripStore.activeLaunchDecision(
+            for: [],
+            hasAlreadyPresented: false,
+            hasBlockingPresentation: false,
+            on: currentDate
+        ) == .none)
+        #expect(TripStore.activeLaunchDecision(
+            for: [open],
+            hasAlreadyPresented: false,
+            hasBlockingPresentation: false,
+            on: currentDate
+        ) == .none)
+        #expect(TripStore.activeLaunchDecision(
+            for: [open, firstActive],
+            hasAlreadyPresented: false,
+            hasBlockingPresentation: false,
+            on: currentDate
+        ) == .single(firstActive.id))
+        #expect(TripStore.activeLaunchDecision(
+            for: [open, secondActive, firstActive],
+            hasAlreadyPresented: false,
+            hasBlockingPresentation: false,
+            on: currentDate
+        ) == .chooser([firstActive.id, secondActive.id]))
     }
 
     @MainActor

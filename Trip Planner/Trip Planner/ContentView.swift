@@ -9,7 +9,13 @@ struct ContentView: View {
     var body: some View {
         TripPlannerRootView(appInfo: appInfoProvider.appInfo)
             .task {
-                try? TripSeedService.seedIfNeeded(in: modelContext)
+                do {
+                    if try TripSeedService.seedUITestScenarioIfNeeded(in: modelContext) == false {
+                        try TripSeedService.seedIfNeeded(in: modelContext)
+                    }
+                } catch {
+                    assertionFailure("Failed to seed Trip Planner data: \(error.localizedDescription)")
+                }
             }
     }
 }

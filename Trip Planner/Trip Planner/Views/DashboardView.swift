@@ -58,6 +58,13 @@ struct DashboardView: View {
         tripGroups.plannedTrips
     }
 
+    private var activeLaunchEvaluationToken: String {
+        trips
+            .map { "\($0.id.uuidString)-\($0.status.rawValue)-\($0.updatedAt.timeIntervalSince1970)" }
+            .sorted()
+            .joined(separator: "|")
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -191,6 +198,9 @@ struct DashboardView: View {
         .onChange(of: locationService.currentLocation?.timestamp) {
             evaluateActivationPromptIfNeeded(allowsRepeatEvaluation: true)
         }
+        .onChange(of: activeLaunchEvaluationToken) {
+            evaluateActiveLaunchExperienceIfNeeded()
+        }
         .confirmationDialog(
             pendingLifecycleAction?.title ?? "Update Trip",
             isPresented: Binding {
@@ -320,6 +330,7 @@ struct DashboardView: View {
         else {
             return
         }
+        guard trips.isEmpty == false else { return }
 
         let decision = TripStore.activeLaunchDecision(
             for: trips,

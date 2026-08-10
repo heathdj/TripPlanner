@@ -8,6 +8,7 @@
 import XCTest
 
 final class Trip_PlannerUITests: XCTestCase {
+    private let uiTestScenarioEnvironmentKey = "TRIP_PLANNER_UI_TEST_SCENARIO"
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.
@@ -23,17 +24,6 @@ final class Trip_PlannerUITests: XCTestCase {
     }
 
     @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
-        let app = XCUIApplication()
-        app.launch()
-
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // XCUIAutomation Documentation
-        // https://developer.apple.com/documentation/xcuiautomation
-    }
-
-    @MainActor
     func testDashboardRemovesFlexibleTravelWindowCard() throws {
         let app = XCUIApplication()
         app.launch()
@@ -46,10 +36,57 @@ final class Trip_PlannerUITests: XCTestCase {
     }
 
     @MainActor
+    func testLaunchRoutingWithZeroActiveTripsShowsDashboard() throws {
+        let app = launchApp(seedScenario: "zeroActive")
+
+        XCTAssertTrue(app.navigationBars["Trip Planner"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["No active trips"].exists)
+        XCTAssertTrue(app.staticTexts["UI Test Planned"].exists)
+        XCTAssertFalse(app.staticTexts["1 Active Trips"].exists)
+    }
+
+    @MainActor
+    func testLaunchRoutingWithOneActiveTripOpensTripDetail() throws {
+        let app = launchApp(seedScenario: "oneActive")
+
+        XCTAssertTrue(app.navigationBars["Launch Active Solo"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Go to Dashboard"].exists)
+
+        app.buttons["Go to Dashboard"].firstMatch.tap()
+
+        XCTAssertTrue(app.navigationBars["Trip Planner"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Launch Active Solo"].exists)
+    }
+
+    @MainActor
+    func testLaunchRoutingWithMultipleActiveTripsShowsChooserOnce() throws {
+        let app = launchApp(seedScenario: "multipleActive")
+
+        XCTAssertTrue(app.navigationBars["Active Trips"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["2 Active Trips"].exists)
+        XCTAssertTrue(app.staticTexts["Launch Active Alpha"].exists)
+        XCTAssertTrue(app.staticTexts["Launch Active Beta"].exists)
+
+        app.buttons["Go to Dashboard"].firstMatch.tap()
+
+        XCTAssertTrue(app.navigationBars["Trip Planner"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Launch Active Alpha"].exists)
+        XCTAssertFalse(app.staticTexts["2 Active Trips"].exists)
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {
             XCUIApplication().launch()
         }
+    }
+
+    @MainActor
+    private func launchApp(seedScenario: String) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchEnvironment[uiTestScenarioEnvironmentKey] = seedScenario
+        app.launch()
+        return app
     }
 }
