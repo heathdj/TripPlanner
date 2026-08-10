@@ -231,6 +231,14 @@ The useful trick was adding a UI-test-only seed switch. Instead of asking the si
 
 There was also a timing bug hiding in plain sight. SwiftData queries can start empty before seed data arrives, so the dashboard could decide "no active trip launch needed" too early and spend its one startup ticket. The fix was to wait for real trip data before consuming that decision. It is the software equivalent of checking the mailbox after the mail has actually been delivered.
 
+### 2026-08-10: Issue #59 Gives Generated Plans a Bouncer
+
+Issue `#59` adds a firm door policy to generated itineraries. The model can still suggest a draft, but vague placeholders like "Visit a museum" or "Have lunch" do not get waved through just because they arrived in structured JSON. Named places, named restaurants, and useful boundary events are welcome; generic filler goes home.
+
+The key lesson is that prompts are requests, not contracts. FoundationModels guided generation gives the app a typed shape, which is great, but it cannot fully understand product policy like "arrival is okay on day one, departure is okay on the final day, and lunch needs a real restaurant name." That policy belongs in deterministic post-generation validation where tests can pin it down.
+
+MapKit enrichment now has a clearer fallback story too. If a generated place cannot be resolved into provider-backed details, the review sheet marks it as needing exact-place review instead of pretending it is settled. The user still gets the review-before-save workflow, and the app stays honest about what it knows.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

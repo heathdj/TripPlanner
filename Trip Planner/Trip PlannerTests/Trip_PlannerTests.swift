@@ -817,6 +817,8 @@ struct TripPlannerFoundationTests {
         #expect(prompt.contains("Traveler count: 2"))
         #expect(prompt.contains("Trip theme: Harbor views and local food"))
         #expect(prompt.contains("Selected interests: Museums, Local Food"))
+        #expect(prompt.contains("Use specific named places whenever possible"))
+        #expect(prompt.contains("Include at least one specific named restaurant"))
         #expect(prompt.contains("Do not include reservations, prices, weather, hours, live schedules"))
     }
 
@@ -837,9 +839,9 @@ struct TripPlannerFoundationTests {
 
         #expect(draft.title == "Generated Trip Draft")
         #expect(draft.overview == "Review these on-device suggestions before saving anything to your trip.")
-        #expect(draft.items.map(\.dayNumber) == [1, 1, 2, 3])
-        #expect(draft.items.map(\.category) == [.transit, .stay, .activity, .food])
-        #expect(draft.items[1].name == "Trip idea")
+        #expect(draft.items.map(\.dayNumber) == [1, 2])
+        #expect(draft.items.map(\.category) == [.transit, .activity])
+        #expect(draft.items.map(\.name) == ["Arrival", "Gallery"])
     }
 
     @MainActor
@@ -850,14 +852,141 @@ struct TripPlannerFoundationTests {
             overview: "Draft",
             items: [
                 TripPlanDraftItemInput(name: "Departure", notes: "Airport", category: .transit, dayNumber: 1),
-                TripPlanDraftItemInput(name: "Museum", notes: "Indoor option", category: .activity, dayNumber: 2),
+                TripPlanDraftItemInput(name: "MAAT Museum", notes: "Indoor option", category: .activity, dayNumber: 2),
                 TripPlanDraftItemInput(name: "Departure Event", notes: "Fly home", category: .transit, dayNumber: 4)
             ],
             durationDays: 4
         )
 
         #expect(draft.items.filter(\.isDepartureEvent).map(\.name) == ["Departure Event"])
-        #expect(draft.items.map(\.name) == ["Museum", "Departure Event"])
+        #expect(draft.items.map(\.name) == ["MAAT Museum", "Departure Event"])
+    }
+
+    @MainActor
+    @Test("Generated trip drafts filter vague placeholders but keep named places", .bug("https://github.com/heathdj/TripPlanner/issues/59"))
+    func generatedTripDraftsFilterVaguePlaceholdersButKeepNamedPlaces() {
+        let draft = TripPlanGenerationSanitizer.draft(
+            title: "Paris",
+            overview: "Draft",
+            items: [
+                TripPlanDraftItemInput(name: "Visit a museum", notes: "Generic activity", category: .activity, dayNumber: 1),
+                TripPlanDraftItemInput(name: "Visit the Louvre Museum", notes: "Review exact entrance details.", category: .activity, dayNumber: 1),
+                TripPlanDraftItemInput(name: "Explore downtown", notes: "Too vague", category: .activity, dayNumber: 2),
+                TripPlanDraftItemInput(name: "Go shopping", notes: "Too vague", category: .activity, dayNumber: 2),
+                TripPlanDraftItemInput(name: "Shakespeare and Company", notes: "Named bookstore stop.", category: .activity, dayNumber: 3)
+            ],
+            durationDays: 3
+        )
+
+        #expect(draft.items.map(\.name) == ["Visit the Louvre Museum", "Shakespeare and Company"])
+    }
+
+    @MainActor
+    @Test("Generated trip drafts allow only boundary arrival and departure placeholders", .bug("https://github.com/heathdj/TripPlanner/issues/59"))
+    func generatedTripDraftsAllowOnlyBoundaryArrivalAndDeparturePlaceholders() {
+        let draft = TripPlanGenerationSanitizer.draft(
+            title: "Rome",
+            overview: "Draft",
+            items: [
+                TripPlanDraftItemInput(name: "Arrival", notes: "Settle in.", category: .transit, dayNumber: 1),
+                TripPlanDraftItemInput(name: "Arrival", notes: "Bad middle placeholder.", category: .transit, dayNumber: 2),
+                TripPlanDraftItemInput(name: "Departure", notes: "Bad middle placeholder.", category: .transit, dayNumber: 2),
+                TripPlanDraftItemInput(name: "Colosseum", notes: "Named landmark.", category: .activity, dayNumber: 2),
+                TripPlanDraftItemInput(name: "Departure", notes: "Airport transfer.", category: .transit, dayNumber: 4)
+            ],
+            durationDays: 4
+        )
+
+        #expect(draft.items.map(\.name) == ["Arrival", "Colosseum", "Departure"])
+        #expect(draft.items.map(\.dayNumber) == [1, 2, 4])
+    }
+
+    @MainActor
+    @Test("Generated trip drafts require named restaurant items", .bug("https://github.com/heathdj/TripPlanner/issues/59"))
+    func generatedTripDraftsRequireNamedRestaurantItems() {
+        let draft = TripPlanGenerationSanitizer.draft(
+            title: "Austin",
+            overview: "Draft",
+            items: [
+                TripPlanDraftItemInput(name: "Have lunch", notes: "Generic meal", category: .food, dayNumber: 1),
+                TripPlanDraftItemInput(name: "Eat at a restaurant", notes: "Generic meal", category: .food, dayNumber: 1),
+                TripPlanDraftItemInput(name: "Lunch at Franklin Barbecue", notes: "Named meal phrasing.", category: .food, dayNumber: 2),
+                TripPlanDraftItemInput(name: "Franklin Barbecue", notes: "Named restaurant candidate.", category: .food, dayNumber: 2),
+                TripPlanDraftItemInput(name: "Veracruz All Natural", notes: "Named restaurant candidate.", category: .food, dayNumber: 3)
+            ],
+            durationDays: 3
+        )
+
+        #expect(draft.items.map(\.name) == ["Franklin Barbecue", "Lunch at Franklin Barbecue", "Veracruz All Natural"])
+        #expect(draft.items.allSatisfy { $0.category == .food })
+    }
+
+    @MainActor
+    @Test("Generated trip drafts strip unsafe live details from notes", .bug("https://github.com/heathdj/TripPlanner/issues/59"))
+    func generatedTripDraftsStripUnsafeLiveDetailsFromNotes() {
+        let draft = TripPlanGenerationSanitizer.draft(
+            title: "Sydney",
+            overview: "Draft",
+            items: [
+                TripPlanDraftItemInput(name: "Sydney Opera House", notes: "Opens at 9 AM and tickets are $45.", category: .activity, dayNumber: 1),
+                TripPlanDraftItemInput(name: "Museum of Contemporary Art Australia", notes: "Circular Quay area.", category: .activity, dayNumber: 2),
+                TripPlanDraftItemInput(name: "Bennelong", notes: "1 Bennelong Point, Sydney.", category: .food, dayNumber: 2)
+            ],
+            durationDays: 2
+        )
+
+        #expect(draft.items.map(\.name) == ["Sydney Opera House", "Bennelong", "Museum of Contemporary Art Australia"])
+        #expect(draft.items[0].notesOrAddress.isEmpty)
+        #expect(draft.items[1].notesOrAddress.isEmpty)
+        #expect(draft.items[2].notesOrAddress == "Circular Quay area.")
+    }
+
+    @MainActor
+    @Test("Generated trip drafts block malformed generic output from save path", .bug("https://github.com/heathdj/TripPlanner/issues/59"))
+    func generatedTripDraftsBlockMalformedGenericOutputFromSavePath() {
+        let draft = TripPlanGenerationSanitizer.draft(
+            title: "Malformed",
+            overview: "Draft",
+            items: [
+                TripPlanDraftItemInput(name: "", notes: "Blank", category: .activity, dayNumber: 1),
+                TripPlanDraftItemInput(name: "Trip idea", notes: "Fallback-style placeholder", category: .activity, dayNumber: 1),
+                TripPlanDraftItemInput(name: "Have dinner", notes: "Generic meal", category: .food, dayNumber: 2)
+            ],
+            durationDays: 2
+        )
+
+        #expect(draft.items.isEmpty)
+    }
+
+    @MainActor
+    @Test("Generated itinerary items unresolved by place search are marked for review", .bug("https://github.com/heathdj/TripPlanner/issues/59"))
+    func generatedItineraryItemsUnresolvedByPlaceSearchAreMarkedForReview() {
+        let unresolved = ItineraryItem(
+            name: "Louvre Museum",
+            notesOrAddress: "Confirm the exact entrance.",
+            category: .activity,
+            dayNumber: 2
+        )
+        let resolved = ItineraryItem(
+            name: "Colosseum",
+            category: .activity,
+            dayNumber: 2,
+            latitude: 41.8902,
+            longitude: 12.4922
+        )
+        let boundary = ItineraryItem(
+            name: "Departure",
+            category: .transit,
+            dayNumber: 4
+        )
+
+        let reviewItem = GeneratedItineraryPlaceReviewPolicy.itemForReview(unresolved, durationDays: 4)
+        let exactItem = GeneratedItineraryPlaceReviewPolicy.itemForReview(resolved, durationDays: 4)
+        let boundaryItem = GeneratedItineraryPlaceReviewPolicy.itemForReview(boundary, durationDays: 4)
+
+        #expect(reviewItem.notesOrAddress.contains(GeneratedItineraryPlaceReviewPolicy.unresolvedPlaceReviewNote))
+        #expect(exactItem.notesOrAddress.isEmpty)
+        #expect(boundaryItem.notesOrAddress.isEmpty)
     }
 
     @MainActor
