@@ -239,6 +239,12 @@ The key lesson is that prompts are requests, not contracts. FoundationModels gui
 
 MapKit enrichment now has a clearer fallback story too. If a generated place cannot be resolved into provider-backed details, the review sheet marks it as needing exact-place review instead of pretending it is settled. The user still gets the review-before-save workflow, and the app stays honest about what it knows.
 
+### 2026-08-10: Pre-Release Means No Training Wheels
+
+The app stopped auto-loading sample trips for normal launches. Sample data is great scaffolding while building screens, but pre-release testing needs the same blank slate a real traveler gets on first install. Startup still creates settings, because preferences are plumbing; it no longer creates trips or reviewed plans, because those are user data.
+
+The dashboard now greets that empty store with `ContentUnavailableView`, which is SwiftUI's built-in way to say "there is nothing here yet" without making the app feel broken. The difference matters: an empty app should feel ready, not abandoned.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.

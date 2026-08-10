@@ -4,6 +4,7 @@ import SwiftData
 @MainActor
 enum TripSeedService {
     private enum UITestScenario: String {
+        case empty
         case zeroActive
         case oneActive
         case multipleActive
@@ -13,7 +14,6 @@ enum TripSeedService {
 
     static func seedIfNeeded(in context: ModelContext) throws {
         try seedSettingsIfNeeded(in: context)
-        try seedTripsIfNeeded(in: context)
         try context.save()
     }
 
@@ -36,26 +36,6 @@ enum TripSeedService {
         _ = try TravelSettingsStore.settings(in: context)
     }
 
-    private static func seedTripsIfNeeded(in context: ModelContext) throws {
-        let descriptor = FetchDescriptor<Trip>()
-        let count = try context.fetchCount(descriptor)
-
-        guard count == 0 else { return }
-
-        let trips = TripStore.sampleTrips
-        trips.forEach { context.insert($0) }
-
-        if let firstTrip = trips.first {
-            context.insert(
-                ReviewedTripPlan(
-                    tripID: firstTrip.id,
-                    title: "Foundation itinerary review",
-                    notes: "Seed reviewed plan used to verify local persistence for generated trip plans."
-                )
-            )
-        }
-    }
-
     private static func resetPersistentModels(in context: ModelContext) throws {
         try context.fetch(FetchDescriptor<ReviewedTripPlan>()).forEach { context.delete($0) }
         try context.fetch(FetchDescriptor<Trip>()).forEach { context.delete($0) }
@@ -64,6 +44,8 @@ enum TripSeedService {
 
     private static func trips(for scenario: UITestScenario) throws -> [Trip] {
         switch scenario {
+        case .empty:
+            return []
         case .zeroActive:
             return [
                 Trip(
