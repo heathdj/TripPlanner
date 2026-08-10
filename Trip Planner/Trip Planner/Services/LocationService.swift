@@ -1,6 +1,24 @@
 import CoreLocation
 import Foundation
 
+nonisolated enum LocationServiceMessage {
+    static let denied = "Location access is denied. Open Settings to allow Trip Planner to find trips near you."
+    static let restricted = "Location access is restricted on this device. Trips still appear in Open and Closed sections."
+    static let unknownAuthorization = "Trip Planner cannot determine location access right now."
+    static let timeout = "Location is enabled, but the device has not returned a location yet. In Simulator, choose a location from Features > Location and try again."
+    static let temporarilyUnavailable = "Location is enabled, but your current location is not available yet. In Simulator, choose a location from Features > Location and try again."
+    static let unavailable = "Trip Planner could not get your current location. Nearby prompts are paused, but date-based prompts still work."
+
+    static func message(for error: any Error) -> String {
+        if let locationError = error as? CLError,
+           locationError.code == .locationUnknown {
+            return temporarilyUnavailable
+        }
+
+        return unavailable
+    }
+}
+
 @MainActor
 @Observable
 final class LocationService: NSObject {
@@ -45,13 +63,13 @@ final class LocationService: NSObject {
             requestCurrentLocation()
         case .denied:
             isRequestingLocation = false
-            errorMessage = "Location access is denied. Open Settings to allow Trip Planner to find trips near you."
+            errorMessage = LocationServiceMessage.denied
         case .restricted:
             isRequestingLocation = false
-            errorMessage = "Location access is restricted on this device. Trips still appear in Open and Closed sections."
+            errorMessage = LocationServiceMessage.restricted
         @unknown default:
             isRequestingLocation = false
-            errorMessage = "Trip Planner cannot determine location access right now."
+            errorMessage = LocationServiceMessage.unknownAuthorization
         }
     }
 
@@ -104,7 +122,7 @@ final class LocationService: NSObject {
 
             manager.stopUpdatingLocation()
             isRequestingLocation = false
-            errorMessage = "Location is enabled, but the device has not returned a location yet. In Simulator, choose a location from Features > Location and try again."
+            errorMessage = LocationServiceMessage.timeout
         }
     }
 }
@@ -137,13 +155,7 @@ extension LocationService: CLLocationManagerDelegate {
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: any Error) {
-        let message: String
-        if let locationError = error as? CLError,
-           locationError.code == .locationUnknown {
-            message = "Location is enabled, but your current location is not available yet. In Simulator, choose a location from Features > Location and try again."
-        } else {
-            message = "Trip Planner could not get your current location. Nearby prompts are paused, but date-based prompts still work."
-        }
+        let message = LocationServiceMessage.message(for: error)
 
         Task { @MainActor in
             self.manager.stopUpdatingLocation()

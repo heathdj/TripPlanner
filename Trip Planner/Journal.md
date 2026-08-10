@@ -223,6 +223,14 @@ Issue `#60` cuts the standalone Flexible Travel Windows card from the dashboard.
 
 The lesson is that dashboard real estate should earn its rent. If a card does not help someone choose the next action, it becomes lobby furniture. Removing it also let us delete its private stat-pill helper and add a UI test that watches for the old copy staying gone while date context remains visible on real trip cards.
 
+### 2026-08-09: Issue #53 Makes the Launch Door Testable
+
+Issue `#53` is the seatbelt pass for the lifecycle work. The app already knew how to plan, activate, close, prompt, and route active trips at launch; now the tests pin those behaviors down so future features cannot quietly move the furniture.
+
+The useful trick was adding a UI-test-only seed switch. Instead of asking the simulator to tap its way into three elaborate states before each test, the app can launch with zero, one, or multiple active trips already in persistence. That turns launch routing into a controlled experiment: no active trips shows the dashboard, one active trip opens details, and many active trips shows the chooser once.
+
+There was also a timing bug hiding in plain sight. SwiftData queries can start empty before seed data arrives, so the dashboard could decide "no active trip launch needed" too early and spend its one startup ticket. The fix was to wait for real trip data before consuming that decision. It is the software equivalent of checking the mailbox after the mail has actually been delivered.
+
 ## Engineer's Wisdom
 
 Start with the smallest honest architecture. The app does not need a maze of folders before it has real behavior, but it does need clear boundaries once features arrive.
