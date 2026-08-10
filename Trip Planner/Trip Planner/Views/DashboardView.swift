@@ -73,61 +73,73 @@ struct DashboardView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
-                        if activeTrips.isEmpty == false {
-                            ActiveTripShortcut(
-                                activeTripCount: activeTrips.count,
-                                openActiveTrips: presentActiveTripExperience
+                        if trips.isEmpty {
+                            EmptyTripsView(addTrip: { isShowingNewTrip = true })
+                        } else {
+                            if activeTrips.isEmpty == false {
+                                ActiveTripShortcut(
+                                    activeTripCount: activeTrips.count,
+                                    openActiveTrips: presentActiveTripExperience
+                                )
+                            }
+
+                            TripSection(
+                                title: "Active Trips",
+                                emptyTitle: "No active trips",
+                                emptySystemImage: "play.slash",
+                                emptyMessage: "Trips you start will appear here while they are underway.",
+                                trips: activeTrips,
+                                columns: columns,
+                                selectTrip: selectTrip,
+                                requestActivation: requestActivation
+                            )
+
+                            NearYouSection(
+                                nearbyTrips: tripGroups.nearbyTrips,
+                                distanceUnit: distanceUnit,
+                                authorizationStatus: locationService.authorizationStatus,
+                                hasCurrentLocation: locationService.currentLocation != nil,
+                                isRequestingLocation: locationService.isRequestingLocation,
+                                errorMessage: locationService.errorMessage,
+                                selectTrip: selectTrip,
+                                requestActivation: requestActivation,
+                                requestLocation: locationService.requestLocationAccess,
+                                openSystemSettings: openSystemSettings
+                            )
+
+                            TripSection(
+                                title: "Planned Trips",
+                                emptyTitle: "No planned trips",
+                                emptySystemImage: "calendar.badge.clock",
+                                emptyMessage: "Trips with exact dates will appear here before they start.",
+                                trips: plannedTrips,
+                                columns: columns,
+                                selectTrip: selectTrip,
+                                requestActivation: requestActivation
+                            )
+
+                            TripSection(
+                                title: "Open Trips",
+                                emptyTitle: "No open trips",
+                                emptySystemImage: "tray",
+                                emptyMessage: "Flexible trip ideas will appear here until you set exact dates.",
+                                trips: openTrips,
+                                columns: columns,
+                                selectTrip: selectTrip,
+                                requestActivation: requestActivation
+                            )
+
+                            TripSection(
+                                title: "Closed Trips",
+                                emptyTitle: "No closed trips",
+                                emptySystemImage: "checkmark.circle",
+                                emptyMessage: "Completed and cancelled trips will appear here for reference.",
+                                trips: closedTrips,
+                                columns: columns,
+                                selectTrip: selectTrip,
+                                requestActivation: requestActivation
                             )
                         }
-
-                        TripSection(
-                            title: "Active Trips",
-                            emptyTitle: "No active trips",
-                            trips: activeTrips,
-                            columns: columns,
-                            selectTrip: selectTrip,
-                            requestActivation: requestActivation
-                        )
-
-                        NearYouSection(
-                            nearbyTrips: tripGroups.nearbyTrips,
-                            distanceUnit: distanceUnit,
-                            authorizationStatus: locationService.authorizationStatus,
-                            hasCurrentLocation: locationService.currentLocation != nil,
-                            isRequestingLocation: locationService.isRequestingLocation,
-                            errorMessage: locationService.errorMessage,
-                            selectTrip: selectTrip,
-                            requestActivation: requestActivation,
-                            requestLocation: locationService.requestLocationAccess,
-                            openSystemSettings: openSystemSettings
-                        )
-
-                        TripSection(
-                            title: "Planned Trips",
-                            emptyTitle: "No planned trips",
-                            trips: plannedTrips,
-                            columns: columns,
-                            selectTrip: selectTrip,
-                            requestActivation: requestActivation
-                        )
-
-                        TripSection(
-                            title: "Open Trips",
-                            emptyTitle: "No open trips",
-                            trips: openTrips,
-                            columns: columns,
-                            selectTrip: selectTrip,
-                            requestActivation: requestActivation
-                        )
-
-                        TripSection(
-                            title: "Closed Trips",
-                            emptyTitle: "No closed trips",
-                            trips: closedTrips,
-                            columns: columns,
-                            selectTrip: selectTrip,
-                            requestActivation: requestActivation
-                        )
                     }
                     .padding()
                     .frame(maxWidth: 980)
@@ -592,6 +604,26 @@ private struct ActiveTripLaunchChooser: View {
     }
 }
 
+private struct EmptyTripsView: View {
+    let addTrip: () -> Void
+
+    var body: some View {
+        GlassPanel {
+            ContentUnavailableView {
+                Label("No Trips Yet", systemImage: "map")
+            } description: {
+                Text("Create your first trip to start planning dates, places, and itinerary items.")
+            } actions: {
+                Button("Add Trip", systemImage: "plus") {
+                    addTrip()
+                }
+                .buttonStyle(.glassProminent)
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+}
+
 private struct NearYouSection: View {
     let nearbyTrips: [NearbyTrip]
     let distanceUnit: DistanceUnit
@@ -641,43 +673,43 @@ private struct NearYouSection: View {
 
     private var locationStatusPanel: some View {
         GlassPanel {
-            VStack(alignment: .leading, spacing: 12) {
+            ContentUnavailableView {
                 Label(statusTitle, systemImage: statusIcon)
-                    .font(.headline)
-                    .fontDesign(.rounded)
+            } description: {
+                VStack(spacing: 8) {
+                    Text(statusMessage)
 
-                Text(statusMessage)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.caption)
+                    }
                 }
-
-                if canUseLocation {
-                    if isRequestingLocation {
-                        ProgressView()
-                            .controlSize(.small)
-                            .accessibilityLabel("Finding nearby trips")
-                    }
-                } else if isDeniedOrRestricted {
-                    Button("Open Settings", systemImage: "gearshape") {
-                        openSystemSettings()
-                    }
-                    .buttonStyle(.glassProminent)
-                } else {
-                    Button(requestButtonTitle, systemImage: "location.fill") {
-                        requestLocation()
-                    }
-                    .buttonStyle(.glassProminent)
-                    .disabled(isRequestingLocation)
-                }
+            } actions: {
+                locationStatusActions
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private var locationStatusActions: some View {
+        if canUseLocation {
+            if isRequestingLocation {
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityLabel("Finding nearby trips")
+            }
+        } else if isDeniedOrRestricted {
+            Button("Open Settings", systemImage: "gearshape") {
+                openSystemSettings()
+            }
+            .buttonStyle(.glassProminent)
+        } else {
+            Button(requestButtonTitle, systemImage: "location.fill") {
+                requestLocation()
+            }
+            .buttonStyle(.glassProminent)
+            .disabled(isRequestingLocation)
         }
     }
 
@@ -721,6 +753,8 @@ private struct NearYouSection: View {
 private struct TripSection: View {
     let title: String
     let emptyTitle: String
+    let emptySystemImage: String
+    let emptyMessage: String
     let trips: [Trip]
     let columns: [GridItem]
     let selectTrip: (Trip) -> Void
@@ -734,9 +768,12 @@ private struct TripSection: View {
 
             if trips.isEmpty {
                 GlassPanel {
-                    Label(emptyTitle, systemImage: "tray")
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    ContentUnavailableView(
+                        emptyTitle,
+                        systemImage: emptySystemImage,
+                        description: Text(emptyMessage)
+                    )
+                    .frame(maxWidth: .infinity)
                 }
             } else {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {

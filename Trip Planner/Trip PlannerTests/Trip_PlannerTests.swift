@@ -1377,6 +1377,23 @@ struct TripPlannerFoundationTests {
     }
 
     @MainActor
+    @Test("Pre-release startup seeding creates settings without sample trips")
+    func preReleaseStartupSeedingCreatesSettingsWithoutSampleTrips() throws {
+        let storeURL = temporaryStoreURL()
+        try removeStore(at: storeURL)
+        defer { try? removeStore(at: storeURL) }
+
+        let container = try makeContainer(at: storeURL)
+        let context = ModelContext(container)
+
+        try TripSeedService.seedIfNeeded(in: context)
+
+        #expect(try context.fetch(FetchDescriptor<Trip>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<ReviewedTripPlan>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<TravelSettings>()).count == 1)
+    }
+
+    @MainActor
     @Test("Reviewed plan save sorts items and replaces existing plans", .bug("https://github.com/heathdj/TripPlanner/issues/8"))
     func reviewedPlanSaveSortsItemsAndReplacesExistingPlans() throws {
         let storeURL = temporaryStoreURL()
