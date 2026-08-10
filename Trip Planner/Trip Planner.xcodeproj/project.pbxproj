@@ -403,7 +403,7 @@
 				INFOPLIST_FILE = "Trip-Planner-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Trip Planner";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.travel";
-				INFOPLIST_KEY_NSFileProviderDomainUsageDescription = "Trip Planner uses your location to highlight nearby trips and make map-based planning more relevant.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trip Planner uses your location to highlight nearby trips and make map-based planning more relevant.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -441,7 +441,7 @@
 				INFOPLIST_FILE = "Trip-Planner-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Trip Planner";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.travel";
-				INFOPLIST_KEY_NSFileProviderDomainUsageDescription = "Trip Planner uses your location to highlight nearby trips and make map-based planning more relevant.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trip Planner uses your location to highlight nearby trips and make map-based planning more relevant.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

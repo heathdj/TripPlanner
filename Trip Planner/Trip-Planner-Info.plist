@@ -44,7 +44,5 @@
 			<false/>
 		</dict>
 	</dict>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Trip Planner uses your location to highlight nearby trips and make map-based planning more relevant.</string>
 </dict>
 </plist>
