@@ -52,6 +52,54 @@ struct TripPlanDraftItemInput: Equatable, Sendable {
     let dayNumber: Int
 }
 
+enum GeneratedItineraryPlaceReviewPolicy {
+    static let unresolvedPlaceReviewNote = "Needs exact place review."
+
+    static func itemForReview(_ item: ItineraryItem, durationDays: Int) -> ItineraryItem {
+        guard item.hasCoordinate == false,
+              item.mapItemIdentifier == nil,
+              isBoundaryItem(item, durationDays: durationDays) == false
+        else {
+            return item
+        }
+
+        var reviewedItem = item
+        let existingNote = reviewedItem.notesOrAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        if existingNote.isEmpty {
+            reviewedItem.notesOrAddress = unresolvedPlaceReviewNote
+        } else if existingNote.localizedCaseInsensitiveContains(unresolvedPlaceReviewNote) == false {
+            reviewedItem.notesOrAddress = "\(existingNote) \(unresolvedPlaceReviewNote)"
+        }
+
+        return reviewedItem
+    }
+
+    private static func isBoundaryItem(_ item: ItineraryItem, durationDays: Int) -> Bool {
+        guard item.category == .transit else { return false }
+
+        let normalized = normalizedText(item.name)
+        if item.dayNumber == 1,
+           ["arrival", "arrival day", "arrive", "arrive and check in", "check in"].contains(normalized) {
+            return true
+        }
+
+        if item.dayNumber == max(1, durationDays),
+           ["departure", "departure day", "departure event", "depart", "fly home"].contains(normalized) {
+            return true
+        }
+
+        return false
+    }
+
+    private static func normalizedText(_ value: String) -> String {
+        value
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { $0.isEmpty == false }
+            .joined(separator: " ")
+    }
+}
+
 nonisolated enum TripPlanGenerationStatus: Equatable, Sendable {
     case available
     case deviceNotEligible
@@ -167,7 +215,7 @@ struct FoundationModelsTripPlanGenerator: TripPlanGenerating {
     }
 
     static let instructions = """
-    You are a private trip planning assistant running on device. Create practical, reviewable draft itineraries only. Do not invent reservations, confirmed bookings, prices, weather, opening hours, event schedules, live availability, or claims that require current data.
+    You are a private trip planning assistant running on device. Create practical, reviewable draft itineraries only. Prefer concrete named places, landmarks, businesses, events, restaurants, neighborhoods, or activities. Do not invent reservations, confirmed bookings, prices, weather, opening hours, event schedules, live availability, street addresses, phone numbers, or claims that require current data.
     """
 
     static func prompt(for input: TripPlanGenerationInput) -> String {
@@ -189,8 +237,13 @@ struct FoundationModelsTripPlanGenerator: TripPlanGenerating {
         - Create chronological itinerary items for days 1 through \(input.durationDays).
         - Each item dayNumber must be between 1 and \(input.durationDays).
         - Each item category must be stay, food, activity, or transit.
+        - Use specific named places whenever possible, such as "Visit the Louvre Museum" instead of "Visit a museum".
+        - Omit vague placeholders such as "Explore downtown", "Go shopping", "Visit a museum", "Have lunch", or "Eat at a restaurant".
+        - Generic arrival items are allowed only as the first trip-boundary item. Generic departure items are allowed only as the final trip-boundary item.
+        - Include at least one specific named restaurant when the destination, interests, and your general knowledge support a trustworthy candidate.
+        - Do not use "Have lunch", "Eat at a restaurant", or similar generic meal text as a substitute for a named restaurant.
         - Keep notes useful for a draft, but avoid addresses unless they are broad area names.
-        - Do not include reservations, prices, weather, hours, live schedules, or statements that imply confirmed availability.
+        - Do not include reservations, prices, weather, hours, live schedules, street addresses, phone numbers, or statements that imply confirmed availability.
         """
     }
 }
@@ -212,13 +265,13 @@ struct FoundationModelItineraryItem {
     @Guide(description: "Trip day number. Must fit within the requested trip duration.", .range(1...30))
     var dayNumber: Int
 
-    @Guide(description: "Short name for this stop or activity")
+    @Guide(description: "Short concrete name for a named place, business, landmark, event, or boundary transit item. Avoid vague names such as Visit a museum, Explore downtown, Have lunch, or Go shopping.")
     var name: String
 
-    @Guide(description: "Helpful planning note. Do not include prices, hours, live schedules, or confirmed reservations.")
+    @Guide(description: "Helpful planning note. Do not include prices, hours, live schedules, street addresses, phone numbers, confirmed reservations, or live availability.")
     var notes: String
 
-    @Guide(description: "Supported itinerary category")
+    @Guide(description: "Supported itinerary category. Food items must name a specific restaurant or food destination.")
     var category: FoundationModelItineraryCategory
 }
 
@@ -270,12 +323,23 @@ enum TripPlanGenerationSanitizer {
     ) -> TripPlanDraft {
         let duration = max(1, durationDays)
         let generatedItems = itemInputs
-            .map { item in
-                ItineraryItem(
-                    name: clean(item.name, fallback: "Trip idea"),
-                    notesOrAddress: clean(item.notes),
+            .compactMap { item -> ItineraryItem? in
+                let dayNumber = min(max(1, item.dayNumber), duration)
+                let cleanedName = clean(item.name)
+                guard acceptsGeneratedItem(
+                    name: cleanedName,
                     category: item.category,
-                    dayNumber: min(max(1, item.dayNumber), duration)
+                    dayNumber: dayNumber,
+                    durationDays: duration
+                ) else {
+                    return nil
+                }
+
+                return ItineraryItem(
+                    name: cleanedName,
+                    notesOrAddress: safeNotes(from: item.notes),
+                    category: item.category,
+                    dayNumber: dayNumber
                 )
             }
 
@@ -298,5 +362,166 @@ enum TripPlanGenerationSanitizer {
     private static func clean(_ value: String, fallback: String = "") -> String {
         let cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return cleaned.isEmpty ? fallback : cleaned
+    }
+
+    private static func safeNotes(from value: String) -> String {
+        let cleaned = clean(value)
+        guard cleaned.isEmpty == false else { return "" }
+
+        let normalized = normalizedText(cleaned)
+        let unsafeFragments = [
+            "reservation",
+            "reserved",
+            "booking",
+            "booked",
+            "confirmed",
+            "open from",
+            "opens at",
+            "closes at",
+            "opening hours",
+            "hours are",
+            "available at",
+            "availability",
+            "$",
+            "€",
+            "£"
+        ]
+
+        guard unsafeFragments.contains(where: { normalized.contains($0) }) == false,
+              containsPhoneNumber(cleaned) == false,
+              containsStreetAddress(cleaned) == false
+        else {
+            return ""
+        }
+
+        return cleaned
+    }
+
+    private static func acceptsGeneratedItem(
+        name: String,
+        category: ItineraryItemCategory,
+        dayNumber: Int,
+        durationDays: Int
+    ) -> Bool {
+        guard name.isEmpty == false else { return false }
+
+        if isGenericArrival(name) {
+            return category == .transit && dayNumber == 1
+        }
+
+        if isGenericDeparture(name) {
+            return category == .transit && dayNumber == durationDays
+        }
+
+        return isVagueGeneratedItem(name, category: category) == false
+    }
+
+    private static func isVagueGeneratedItem(_ name: String, category: ItineraryItemCategory) -> Bool {
+        let normalized = normalizedText(name)
+        let vagueNames = [
+            "activity",
+            "arrival",
+            "breakfast",
+            "dinner",
+            "departure",
+            "eat at a restaurant",
+            "explore",
+            "explore downtown",
+            "explore the city",
+            "food",
+            "go shopping",
+            "have breakfast",
+            "have dinner",
+            "have lunch",
+            "hotel",
+            "lunch",
+            "museum",
+            "restaurant",
+            "shopping",
+            "sightseeing",
+            "stay",
+            "transit",
+            "trip idea",
+            "visit a landmark",
+            "visit a museum",
+            "walk around"
+        ]
+
+        if vagueNames.contains(normalized) {
+            return true
+        }
+
+        let vaguePrefixes = [
+            "go to a ",
+            "have a ",
+            "visit a ",
+            "visit an "
+        ]
+
+        if vaguePrefixes.contains(where: { normalized.hasPrefix($0) }) {
+            return true
+        }
+
+        if category == .food {
+            let genericFoodNames = [
+                "breakfast",
+                "brunch",
+                "dinner",
+                "eat at a local restaurant",
+                "eat at a restaurant",
+                "food market",
+                "have breakfast",
+                "have brunch",
+                "have dinner",
+                "have lunch",
+                "late dinner",
+                "local food",
+                "lunch",
+                "nearby restaurant",
+                "restaurant",
+                "street food"
+            ]
+
+            return genericFoodNames.contains(normalized)
+        }
+
+        return false
+    }
+
+    private static func isGenericArrival(_ name: String) -> Bool {
+        let normalized = normalizedText(name)
+        return normalized == "arrival"
+            || normalized == "arrival day"
+            || normalized == "arrive"
+            || normalized == "arrive and check in"
+            || normalized == "check in"
+    }
+
+    private static func isGenericDeparture(_ name: String) -> Bool {
+        let normalized = normalizedText(name)
+        return normalized == "departure"
+            || normalized == "departure day"
+            || normalized == "departure event"
+            || normalized == "depart"
+            || normalized == "fly home"
+    }
+
+    private static func normalizedText(_ value: String) -> String {
+        value
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { $0.isEmpty == false }
+            .joined(separator: " ")
+    }
+
+    private static func containsPhoneNumber(_ value: String) -> Bool {
+        value.range(of: #"\+?\d[\d\s().-]{6,}\d"#, options: .regularExpression) != nil
+    }
+
+    private static func containsStreetAddress(_ value: String) -> Bool {
+        value.range(
+            of: #"\b\d{1,6}\s+[A-Za-z0-9.'-]+(?:\s+[A-Za-z0-9.'-]+){0,4}\s+(Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Way|Place|Pl|Point|Pt|Piazza|Rue|Via)\b"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
     }
 }

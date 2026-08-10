@@ -322,7 +322,12 @@ struct TripDetailView: View {
             if let enrichedItem = try? await PlaceMetadataRefreshService.refreshedItem(item, in: trip) {
                 enrichedItems.append(EditableItineraryItem(item: enrichedItem))
             } else {
-                enrichedItems.append(EditableItineraryItem(item: item))
+                enrichedItems.append(EditableItineraryItem(
+                    item: GeneratedItineraryPlaceReviewPolicy.itemForReview(
+                        item,
+                        durationDays: trip.durationDays
+                    )
+                ))
             }
         }
 
