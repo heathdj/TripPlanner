@@ -401,7 +401,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Trip-Planner-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Trip Planner";
+				INFOPLIST_KEY_CFBundleDisplayName = "Bald Traveler Trip Planner";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.travel";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trip Planner uses your location to highlight nearby trips and make map-based planning more relevant.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -439,7 +439,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Trip-Planner-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Trip Planner";
+				INFOPLIST_KEY_CFBundleDisplayName = "Bald Traveler Trip Planner";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.travel";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trip Planner uses your location to highlight nearby trips and make map-based planning more relevant.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
